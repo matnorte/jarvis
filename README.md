@@ -1,7 +1,7 @@
 # Jarvis backend
 
 Voice gateway: WebSocket in (PCM16 16 kHz) -> faster-whisper STT -> Hermes Agent
-(fast gpt-5.6-luna profile, escalating to a deep gpt-5.6-sol profile on `[[DEEP]]`, both via
+(fast gpt-5.6-luna profile, escalating to a deep gpt-6.1-sol profile on `[[DEEP]]`, both via
 OpenAI Codex OAuth) -> ElevenLabs TTS
 -> WebSocket out (PCM16 24 kHz). Persona in `persona/SOUL.md` (fast profile, with the
 routing rule) and `persona/SOUL.deep.md` (deep profile, same persona without it).

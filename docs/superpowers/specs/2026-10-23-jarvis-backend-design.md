@@ -3,7 +3,7 @@
 Date: 2026-10-23 · Status: approved, implemented
 
 > **Revisions after implementation (2026-10-23)**
-> - LLM: OpenAI via ChatGPT/Codex subscription OAuth (Hermes provider `openai-codex`) instead of Anthropic: fast profile `gpt-5.6-luna`, deep profile `gpt-5.6-sol`. No LLM API key; one shared OAuth login. Where this spec says Haiku 5.5 / Opus 5.5 or `ANTHROPIC_API_KEY`, read these.
+> - LLM: OpenAI via ChatGPT/Codex subscription OAuth (Hermes provider `openai-codex`) instead of Anthropic: fast profile `gpt-5.6-luna`, deep profile `gpt-6.1-sol`. No LLM API key; one shared OAuth login. Where this spec says Haiku 5.5 / Opus 5.5 or `ANTHROPIC_API_KEY`, read these.
 > - The deep profile uses `persona/SOUL.deep.md` (no routing rule), not the shared `SOUL.md`.
 > - The client `text` message takes an optional `lang` (`pt` | `en`, default `en`).
 

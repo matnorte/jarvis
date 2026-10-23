@@ -2,7 +2,7 @@
 # Install Hermes Agent for Jarvis: user `hermes`, profiles fast (8642) and deep (8643).
 #
 # The LLM is OpenAI via ChatGPT/Codex subscription OAuth (provider `openai-codex`):
-# fast = gpt-5.6-luna, deep = gpt-5.6-sol (override with FAST_MODEL / DEEP_MODEL).
+# fast = gpt-5.6-luna, deep = gpt-6.1-sol (override with FAST_MODEL / DEEP_MODEL).
 # No LLM API key is needed; after this script, log in once as the hermes user:
 #   sudo -u hermes -H /home/hermes/.local/bin/hermes auth add openai-codex
 # (device-code flow, works over SSH). Both profiles share that login.
@@ -28,7 +28,8 @@
 # - Provider `openai-codex` ("ChatGPT or Codex Subscription"): `hermes auth add openai-codex`
 #   uses a device code by default; credentials go to ~/.hermes/auth.json and OAuth logins
 #   in the root auth.json are shared by every profile. Codex models include gpt-5.6-luna,
-#   gpt-5.6-terra, gpt-5.6-sol and gpt-5.5.
+#   gpt-5.6-terra, gpt-5.6-sol and gpt-5.5. VERIFY: gpt-6.1-sol (released 2026-09-29, in Codex) is
+#   not on that docs page yet; check `hermes -p deep model` lists it.
 #
 # --- NOT verified (marked `# VERIFY:` below; check with `hermes --help` / docs) ---
 # - The config keys `model.provider` / `model.default` (docs show a `model:` section with
@@ -41,7 +42,7 @@ set -euo pipefail
 SECRETS_FILE="${SECRETS_FILE:-/root/jarvis-secrets.env}"
 PROVIDER=openai-codex
 FAST_MODEL="${FAST_MODEL:-gpt-5.6-luna}"
-DEEP_MODEL="${DEEP_MODEL:-gpt-5.6-sol}"
+DEEP_MODEL="${DEEP_MODEL:-gpt-6.1-sol}"
 HERMES_USER=hermes
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOUL_FAST="$REPO_DIR/persona/SOUL.md"       # includes the [[DEEP]] routing rule
