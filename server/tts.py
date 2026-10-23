@@ -1,4 +1,17 @@
-"""ElevenLabs streaming TTS over WebSocket, plus pre-generated canned lines."""
+"""ElevenLabs streaming TTS over WebSocket, plus pre-generated canned lines.
+
+API notes (docs: elevenlabs.io/docs/api-reference/text-to-speech/
+v-1-text-to-speech-voice-id-stream-input and the realtime-tts guide, fetched
+2026-10-23):
+- Query `auto_mode` (bool, default false) "focuses on reducing the latency by
+  disabling the chunk schedule and all buffers"; recommended when sending full
+  sentences. The ClauseChunker sends whole clauses, so with auto_mode each one
+  is generated as soon as it arrives instead of waiting for the default
+  chunk_length_schedule ([120, 160, 250, 290] chars).
+- Each text message "should always end with a single space".
+- try_trigger_generation is an advanced knob the docs advise leaving false; it
+  is redundant with auto_mode and no longer sent.
+"""
 
 import asyncio
 import base64
@@ -54,6 +67,7 @@ class ElevenLabsTTS:
                 "model_id": MODEL_ID,
                 "output_format": OUTPUT_FORMAT,
                 "language_code": lang,
+                "auto_mode": "true",
             }
         )
         return f"{self._base_url}/v1/text-to-speech/{self._voice_id}/stream-input?{query}"
@@ -62,9 +76,8 @@ class ElevenLabsTTS:
         await ws.send(json.dumps({"text": " ", "xi_api_key": self._api_key}))
         async for chunk in chunks:
             if chunk:
-                await ws.send(
-                    json.dumps({"text": chunk, "try_trigger_generation": True})
-                )
+                text = chunk if chunk.endswith(" ") else chunk + " "
+                await ws.send(json.dumps({"text": text}))
         await ws.send(json.dumps({"text": ""}))
 
     async def synthesize(

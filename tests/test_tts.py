@@ -48,14 +48,15 @@ async def test_synthesize_streams_audio():
     assert b"".join(out) == b"abcd"
     assert seen["msgs"][0]["xi_api_key"] == "secret-key"
     assert seen["msgs"][0]["text"] == " "
-    assert seen["msgs"][1] == {"text": "Hello ", "try_trigger_generation": True}
-    assert seen["msgs"][2]["text"] == "there."
+    assert seen["msgs"][1] == {"text": "Hello "}
+    assert seen["msgs"][2] == {"text": "there. "}  # docs: text ends with one space
     assert seen["msgs"][-1] == {"text": ""}
     p = seen["path"]
     assert p.startswith("/v1/text-to-speech/voice1/stream-input?")
     assert "model_id=eleven_flash_v2_5" in p
     assert "output_format=pcm_24000" in p
     assert "language_code=en" in p
+    assert "auto_mode=true" in p  # each clause is generated at once
 
 
 async def test_server_error_message_raises():
