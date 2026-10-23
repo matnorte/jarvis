@@ -208,6 +208,6 @@ async def _pump(ws: WebSocket, session: Session, send_text) -> None:
         elif isinstance(parsed, protocol.Interrupt):
             await session.on_interrupt()
         elif isinstance(parsed, protocol.TextInput):
-            await session.on_text(parsed.text)
+            await session.on_text(parsed.text, parsed.lang)
         else:  # repeated hello: ignore
             log.debug("ignored repeated hello")

@@ -22,9 +22,13 @@ class Interrupt:
     pass
 
 
+LANGS = ("pt", "en")
+
+
 @dataclass(frozen=True)
 class TextInput:
     text: str
+    lang: str = "en"
 
 
 ClientMsg = Hello | EndUtterance | Interrupt | TextInput
@@ -52,7 +56,10 @@ def parse_client(text: str) -> ClientMsg:
     if kind == "interrupt":
         return Interrupt()
     if kind == "text":
-        return TextInput(_str_field(data, "text"))
+        lang = data.get("lang", "en")
+        if lang not in LANGS:
+            raise ProtocolError("invalid field: lang (expected 'pt' or 'en')")
+        return TextInput(_str_field(data, "text"), lang)
     raise ProtocolError(f"unknown message type: {kind!r}")
 
 

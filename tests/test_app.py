@@ -167,6 +167,25 @@ def test_text_turn_roundtrip_uses_token_device():
     assert deps.router.calls == [("phone", "hi", "en")]
 
 
+def test_text_lang_reaches_session():
+    client, deps = make()
+    with client.websocket_connect("/ws") as ws:
+        ws.send_text(hello())
+        ws.send_text(json.dumps({"type": "text", "text": "bom dia", "lang": "pt"}))
+        while json.loads(ws.receive_text())["type"] != "transcript":
+            pass
+    assert deps.router.calls == [("phone", "bom dia", "pt")]
+
+
+def test_text_bad_lang_is_bad_message():
+    client, deps = make()
+    with client.websocket_connect("/ws") as ws:
+        ws.send_text(hello())
+        ws.send_text(json.dumps({"type": "text", "text": "hola", "lang": "es"}))
+        assert json.loads(ws.receive_text())["code"] == "bad_message"
+    assert deps.router.calls == []
+
+
 def test_malformed_after_hello_keeps_connection_open():
     client, _ = make()
     with client.websocket_connect("/ws") as ws:
