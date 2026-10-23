@@ -30,8 +30,8 @@ async def _run(url: str, token: str, device: str, pcm: bytes, audio: bytearray) 
             for i in range(0, len(pcm), frame_bytes):
                 await ws.send(pcm[i : i + frame_bytes])
                 await asyncio.sleep(FRAME_MS / 1000)
+            sent_end = True  # set before sending: only idle after this point ends the turn
             await ws.send(json.dumps({"type": "end_utterance"}))
-            sent_end = True
 
         sender = asyncio.create_task(send_audio())
         try:

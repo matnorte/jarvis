@@ -24,34 +24,47 @@ LIMIT_S = 2.0
 
 async def _measure(url: str, token: str, pcm: bytes, res: dict) -> None:
     frame_bytes = IN_RATE * FRAME_MS // 1000 * 2
+    t0: float | None = None  # set when end_utterance is sent (end of upload)
     async with websockets.connect(url, max_size=None) as ws:
         await ws.send(json.dumps({"type": "hello", "token": token, "device": "bench"}))
-        for i in range(0, len(pcm), frame_bytes):
-            await ws.send(pcm[i : i + frame_bytes])
-            await asyncio.sleep(FRAME_MS / 1000)
-        t0 = time.perf_counter()
-        await ws.send(json.dumps({"type": "end_utterance"}))
-        async for msg in ws:
-            now = time.perf_counter() - t0
-            if isinstance(msg, bytes):
-                if res["audio"] is None:
-                    res["audio"] = now
-                if res["reply"] is not None and res["reply_audio"] is None:
-                    res["reply_audio"] = now
+
+        async def upload() -> None:
+            nonlocal t0
+            for i in range(0, len(pcm), frame_bytes):
+                await ws.send(pcm[i : i + frame_bytes])
+                await asyncio.sleep(FRAME_MS / 1000)
+            t0 = time.perf_counter()
+            await ws.send(json.dumps({"type": "end_utterance"}))
+
+        sender = asyncio.create_task(upload())
+        try:
+            # Read concurrently with the upload so anything the server sends before
+            # end_utterance (e.g. state idle after leading silence) is seen as pre-turn.
+            async for msg in ws:
+                if t0 is None:
+                    continue  # belongs to before this turn
+                now = time.perf_counter() - t0
+                if isinstance(msg, bytes):
+                    if res["audio"] is None:
+                        res["audio"] = now
+                    if res["reply"] is not None and res["reply_audio"] is None:
+                        res["reply_audio"] = now
+                        return
+                    continue
+                data = json.loads(msg)
+                kind = data.get("type")
+                if kind == "transcript" and data.get("final") and res["transcript"] is None:
+                    res["transcript"] = now
+                elif kind == "reply_text" and res["reply"] is None:
+                    res["reply"] = now
+                elif kind == "error":
+                    res["status"] = f"error {data.get('code')}"
+                elif kind == "speaking_done" or (kind == "state" and data.get("state") == "idle"):
+                    if res["reply_audio"] is None and res["status"] == "ok":
+                        res["status"] = "no reply audio"
                     return
-                continue
-            data = json.loads(msg)
-            kind = data.get("type")
-            if kind == "transcript" and data.get("final") and res["transcript"] is None:
-                res["transcript"] = now
-            elif kind == "reply_text" and res["reply"] is None:
-                res["reply"] = now
-            elif kind == "error":
-                res["status"] = f"error {data.get('code')}"
-            elif kind == "speaking_done" or (kind == "state" and data.get("state") == "idle"):
-                if res["reply_audio"] is None and res["status"] == "ok":
-                    res["status"] = "no reply audio"
-                return
+        finally:
+            sender.cancel()
 
 
 async def measure(url: str, token: str, path: str, timeout: float) -> dict:
