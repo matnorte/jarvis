@@ -40,6 +40,7 @@ dependencies {
     implementation("com.github.gkonovalov.android-vad:silero:2.0.10")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20250517")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     testImplementation("com.squareup.okhttp3:mockwebserver3:5.5.1")
 
