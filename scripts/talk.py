@@ -1,36 +1,37 @@
 """Stream a 16 kHz mono wav to the gateway and save the spoken reply as a 24 kHz wav.
 
 Usage: python -m scripts.talk --url wss://jarvis.openclawchip.tech/ws --token T in.wav out.wav
+The turn ends on speaking_done, or on state idle after the utterance was sent
+(error turns and empty/noise transcripts end that way); --timeout bounds the whole run.
 """
 
 import argparse
 import asyncio
 import json
+import sys
 import wave
 
 import websockets
+from websockets.exceptions import ConnectionClosed, InvalidHandshake
 
 IN_RATE = 16000
 OUT_RATE = 24000
 FRAME_MS = 20
 
 
-async def talk(url: str, token: str, device: str, in_path: str, out_path: str) -> None:
-    with wave.open(in_path, "rb") as w:
-        if w.getframerate() != IN_RATE or w.getnchannels() != 1 or w.getsampwidth() != 2:
-            raise SystemExit("input must be 16 kHz mono PCM16 wav")
-        pcm = w.readframes(w.getnframes())
+async def _run(url: str, token: str, device: str, pcm: bytes, audio: bytearray) -> None:
     frame_bytes = IN_RATE * FRAME_MS // 1000 * 2
-    audio = bytearray()
-
+    sent_end = False
     async with websockets.connect(url, max_size=None) as ws:
         await ws.send(json.dumps({"type": "hello", "token": token, "device": device}))
 
         async def send_audio() -> None:
+            nonlocal sent_end
             for i in range(0, len(pcm), frame_bytes):
                 await ws.send(pcm[i : i + frame_bytes])
                 await asyncio.sleep(FRAME_MS / 1000)
             await ws.send(json.dumps({"type": "end_utterance"}))
+            sent_end = True
 
         sender = asyncio.create_task(send_audio())
         try:
@@ -48,16 +49,48 @@ async def talk(url: str, token: str, device: str, in_path: str, out_path: str) -
                     print(f"\n[error {data.get('code')}] {data.get('message')}")
                 elif kind == "speaking_done":
                     print()
-                    break
+                    return
+                elif kind == "state" and data.get("state") == "idle" and sent_end:
+                    print()
+                    return
         finally:
             sender.cancel()
 
-    with wave.open(out_path, "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(OUT_RATE)
-        w.writeframes(bytes(audio))
-    print(f"wrote {len(audio)} bytes of audio to {out_path}")
+
+async def talk(
+    url: str, token: str, device: str, in_path: str, out_path: str, timeout: float
+) -> int:
+    with wave.open(in_path, "rb") as w:
+        if w.getframerate() != IN_RATE or w.getnchannels() != 1 or w.getsampwidth() != 2:
+            print("input must be 16 kHz mono PCM16 wav", file=sys.stderr)
+            return 2
+        pcm = w.readframes(w.getnframes())
+    audio = bytearray()
+    code = 0
+    try:
+        await asyncio.wait_for(_run(url, token, device, pcm, audio), timeout)
+    except asyncio.TimeoutError:
+        print(f"error: timed out after {timeout:.0f} s", file=sys.stderr)
+        code = 1
+    except ConnectionClosed as exc:
+        rcvd = exc.rcvd.code if exc.rcvd else "?"
+        hint = " (bad or missing token)" if rcvd == 4401 else " (replaced by another connection)" if rcvd == 4409 else ""
+        print(f"error: connection closed with code {rcvd}{hint}", file=sys.stderr)
+        code = 1
+    except (InvalidHandshake, OSError) as exc:
+        print(f"error: cannot connect: {exc}", file=sys.stderr)
+        code = 1
+
+    if audio:
+        with wave.open(out_path, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(OUT_RATE)
+            w.writeframes(bytes(audio))
+        print(f"wrote {len(audio)} bytes of audio to {out_path}")
+    else:
+        print("no audio received")
+    return code
 
 
 def main() -> None:
@@ -65,10 +98,11 @@ def main() -> None:
     p.add_argument("--url", required=True)
     p.add_argument("--token", required=True)
     p.add_argument("--device", default="talk-script")
+    p.add_argument("--timeout", type=float, default=30.0)
     p.add_argument("input")
     p.add_argument("output")
     a = p.parse_args()
-    asyncio.run(talk(a.url, a.token, a.device, a.input, a.output))
+    sys.exit(asyncio.run(talk(a.url, a.token, a.device, a.input, a.output, a.timeout)))
 
 
 if __name__ == "__main__":

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Install Hermes Agent for Jarvis: user `hermes`, profiles fast (8642) and deep (8643).
 #
-# Run as root from the repo root:
-#   sudo ANTHROPIC_API_KEY=... API_SERVER_KEY=... bash deploy/install-hermes.sh
-# or put those two variables in a root-only file (default /root/jarvis-secrets.env,
-# override with SECRETS_FILE) and run `sudo bash deploy/install-hermes.sh`.
-# Secrets are never taken as arguments and never printed.
+# Run as root from the repo root, after putting ANTHROPIC_API_KEY and API_SERVER_KEY in a
+# root-only file (mode 600; default /root/jarvis-secrets.env, override with SECRETS_FILE):
+#   sudo bash deploy/install-hermes.sh
+# Do NOT pass the keys inline on the command line (they would land in ps, shell history
+# and auth.log). Secrets are never taken as arguments and never printed.
 #
 # --- Verified against https://hermes-agent.nousresearch.com/docs (2026-10-23) ---
 # - Installer: curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash

@@ -1,5 +1,9 @@
 jarvis.openclawchip.tech {
 	@gateway path /ws /health
-	reverse_proxy @gateway 127.0.0.1:8000
-	respond 404
+	handle @gateway {
+		reverse_proxy 127.0.0.1:8000
+	}
+	handle {
+		respond 404
+	}
 }
