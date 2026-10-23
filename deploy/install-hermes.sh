@@ -32,10 +32,13 @@ set -euo pipefail
 SECRETS_FILE="${SECRETS_FILE:-/root/jarvis-secrets.env}"
 HERMES_USER=hermes
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SOUL_SRC="$REPO_DIR/persona/SOUL.md"
+SOUL_FAST="$REPO_DIR/persona/SOUL.md"       # includes the [[DEEP]] routing rule
+SOUL_DEEP="$REPO_DIR/persona/SOUL.deep.md"  # same persona, no routing rule
 
 [ "$(id -u)" -eq 0 ] || { echo "run as root" >&2; exit 1; }
-[ -f "$SOUL_SRC" ] || { echo "missing $SOUL_SRC (run from the repo)" >&2; exit 1; }
+for f in "$SOUL_FAST" "$SOUL_DEEP"; do
+  [ -f "$f" ] || { echo "missing $f (run from the repo)" >&2; exit 1; }
+done
 
 # Secrets: environment first, then a root-only env file.
 if [ -z "${ANTHROPIC_API_KEY:-}" ] || [ -z "${API_SERVER_KEY:-}" ]; then
@@ -67,7 +70,7 @@ hermes_as() { sudo -u "$HERMES_USER" -H env "PATH=$HH/.local/bin:$PATH" "$@"; }
 
 # 3. Profiles.
 setup_profile() {
-  local name="$1" model="$2" port="$3"
+  local name="$1" model="$2" port="$3" soul="$4"
   local pdir="$HH/.hermes/profiles/$name"
 
   if [ ! -d "$pdir" ]; then
@@ -78,8 +81,8 @@ setup_profile() {
   # VERIFY: model identifier format for Anthropic models (docs example: anthropic/claude-opus-4).
   hermes_as hermes -p "$name" config set model.default "anthropic/$model"
 
-  # Persona: same SOUL.md in both profiles.
-  install -o "$HERMES_USER" -g "$HERMES_USER" -m 644 "$SOUL_SRC" "$pdir/SOUL.md"
+  # Persona: fast gets the routing rule; deep must never answer [[DEEP]].
+  install -o "$HERMES_USER" -g "$HERMES_USER" -m 644 "$soul" "$pdir/SOUL.md"
 
   # Secrets + API server settings go straight into the profile .env (mode 600),
   # written from variables, never via command-line arguments.
@@ -100,8 +103,8 @@ setup_profile() {
   rm -f "$tmp"
 }
 
-setup_profile fast claude-haiku-5-5 8642
-setup_profile deep claude-opus-5-5 8643
+setup_profile fast claude-haiku-5-5 8642 "$SOUL_FAST"
+setup_profile deep claude-opus-5-5 8643 "$SOUL_DEEP"
 
 # 4. systemd units.
 install -m 644 "$REPO_DIR/deploy/hermes-fast.service" /etc/systemd/system/hermes-fast.service
