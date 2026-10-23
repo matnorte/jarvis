@@ -2,7 +2,7 @@
 
 API notes (docs: hermes-agent.nousresearch.com/docs/user-guide/features/api-server,
 fetched 2026-10-23):
-- POST /v1/chat/completions (default http://localhost:8642), bearer API_SERVER_KEY.
+- POST /v1/chat/completions (base URL e.g. http://127.0.0.1:8642/p/fast), bearer API_SERVER_KEY.
 - With "stream": true the reply is SSE; answer text is in choices[0].delta.content.
   Reasoning arrives separately in delta.reasoning_content (ignored here).
 - Lines starting with ":" are keepalive comments (every ~10 s idle); skipped.

@@ -1,0 +1,15 @@
+[Unit]
+Description=Hermes Agent host gateway (multiplexes fast + deep, 127.0.0.1:8642)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hermes
+ExecStart=/home/hermes/.local/bin/hermes gateway run
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Install Hermes Agent for Jarvis: user `hermes`, profiles fast (8642) and deep (8643).
+# Install Hermes Agent for Jarvis: user `hermes`, profiles fast and deep, served by ONE
+# host gateway on 127.0.0.1:8642 at /p/fast and /p/deep (Hermes >= v0.21 allows only one
+# gateway per host; per-profile `hermes -p NAME gateway` refuses to start).
 #
 # The LLM is OpenAI via ChatGPT/Codex subscription OAuth (provider `openai-codex`):
 # fast = gpt-5.6-luna, deep = gpt-6.1-sol (override with FAST_MODEL / DEEP_MODEL).
@@ -19,12 +21,14 @@
 # - Profiles: `hermes profile create <name>`; `hermes -p <name> ...`; each profile
 #   lives in ~/.hermes/profiles/<name> with its own .env, config.yaml and SOUL.md.
 # - Per-profile `<name> config set <key> <value>` / `hermes -p <name> config set ...`.
-# - API server env vars (in the profile's .env): API_SERVER_ENABLED, API_SERVER_PORT,
-#   API_SERVER_HOST (default 127.0.0.1), API_SERVER_KEY, API_SERVER_MODEL_NAME.
-# - Start command: `hermes -p <name> gateway`.
+# - API server env vars: API_SERVER_ENABLED, API_SERVER_PORT, API_SERVER_HOST (default
+#   127.0.0.1), API_SERVER_KEY. With gateway.multiplex_profiles the host gateway (default
+#   profile, ~/.hermes/.env) owns the listener and serves each profile at /p/<profile>/v1/...;
+#   each profile must have its OWN API_SERVER_KEY in its profile .env.
+# - Start command (foreground, for systemd): `hermes gateway run` as the hermes user.
 # - SOUL.md is read from $HERMES_HOME/SOUL.md (profile dir for a profile).
-# - By default the API model name is the PROFILE name, so we set
-#   API_SERVER_MODEL_NAME=hermes-agent to match what the gateway sends.
+# - Verified on v0.22.5 (2026-10-23): /p/fast and /p/deep answer; requests may send any of
+#   "hermes-agent" or the profile name as `model`.
 # - Provider `openai-codex` ("ChatGPT or Codex Subscription"): `hermes auth add openai-codex`
 #   uses a device code by default; credentials go to ~/.hermes/auth.json and OAuth logins
 #   in the root auth.json are shared by every profile. Codex models include gpt-5.6-luna,
@@ -82,7 +86,7 @@ hermes_as() { sudo -u "$HERMES_USER" -H env "PATH=$HH/.local/bin:$PATH" "$@"; }
 
 # 3. Profiles.
 setup_profile() {
-  local name="$1" model="$2" port="$3" soul="$4"
+  local name="$1" model="$2" soul="$3"
   local pdir="$HH/.hermes/profiles/$name"
 
   if [ ! -d "$pdir" ]; then
@@ -97,36 +101,42 @@ setup_profile() {
   # Persona: fast gets the routing rule; deep must never answer [[DEEP]].
   install -o "$HERMES_USER" -g "$HERMES_USER" -m 644 "$soul" "$pdir/SOUL.md"
 
-  # API server settings go straight into the profile .env (mode 600), written from
-  # variables, never via command-line arguments. The LLM login is OAuth (auth.json),
-  # so no provider key is written; a stale ANTHROPIC_API_KEY line is dropped.
-  local envf="$pdir/.env" tmp
+  # The profile's own API key (required for /p/<name>/ under the host gateway).
+  write_api_env "$pdir/.env" "API_SERVER_ENABLED=true"
+}
+
+# Rewrite an .env (mode 600, owned by hermes): keep unrelated lines, drop old API_SERVER_*
+# and stale ANTHROPIC_API_KEY lines, append API_SERVER_KEY plus the given lines. Secrets
+# come from variables, never from command-line arguments. The LLM login is OAuth.
+write_api_env() {
+  local envf="$1" tmp; shift
   tmp="$(mktemp)"
   chmod 600 "$tmp"
   [ -f "$envf" ] && grep -vE '^(API_SERVER_[A-Z_]+|ANTHROPIC_API_KEY)=' "$envf" >"$tmp" || true
-  {
-    echo "API_SERVER_ENABLED=true"
-    echo "API_SERVER_HOST=127.0.0.1"
-    echo "API_SERVER_PORT=$port"
-    echo "API_SERVER_MODEL_NAME=hermes-agent"
-    echo "API_SERVER_KEY=$API_SERVER_KEY"
-  } >>"$tmp"
+  { printf '%s\n' "$@"; echo "API_SERVER_KEY=$API_SERVER_KEY"; } >>"$tmp"
   install -o "$HERMES_USER" -g "$HERMES_USER" -m 600 "$tmp" "$envf"
   rm -f "$tmp"
 }
 
-setup_profile fast "$FAST_MODEL" 8642 "$SOUL_FAST"
-setup_profile deep "$DEEP_MODEL" 8643 "$SOUL_DEEP"
+setup_profile fast "$FAST_MODEL" "$SOUL_FAST"
+setup_profile deep "$DEEP_MODEL" "$SOUL_DEEP"
 
-# 4. systemd units. Started only once the shared Codex OAuth login exists.
-install -m 644 "$REPO_DIR/deploy/hermes-fast.service" /etc/systemd/system/hermes-fast.service
-install -m 644 "$REPO_DIR/deploy/hermes-deep.service" /etc/systemd/system/hermes-deep.service
+# 4. One host gateway: the default profile owns the API listener on 127.0.0.1:8642 and
+#    multiplexes every profile under /p/<profile>/.
+write_api_env "$HH/.hermes/.env" \
+  "API_SERVER_ENABLED=true" "API_SERVER_HOST=127.0.0.1" "API_SERVER_PORT=8642"
+hermes_as hermes config set gateway.multiplex_profiles true
+
+# 5. systemd unit (replaces the old per-profile units). Started once the Codex login exists.
+systemctl disable --now hermes-fast.service hermes-deep.service 2>/dev/null || true
+rm -f /etc/systemd/system/hermes-fast.service /etc/systemd/system/hermes-deep.service
+install -m 644 "$REPO_DIR/deploy/hermes-gateway.service" /etc/systemd/system/hermes-gateway.service
 systemctl daemon-reload
-systemctl enable hermes-fast.service hermes-deep.service
+systemctl enable hermes-gateway.service
 LOGGED_IN=no
 grep -q '"openai-codex"' "$HH/.hermes/auth.json" 2>/dev/null && LOGGED_IN=yes
 
-# 5. Firewall: only 22, 80, 443 (Hermes binds 127.0.0.1 anyway).
+# 6. Firewall: only 22, 80, 443 (Hermes binds 127.0.0.1 anyway).
 if command -v ufw >/dev/null 2>&1; then
   ufw allow 22/tcp >/dev/null
   ufw allow 80/tcp >/dev/null
@@ -135,10 +145,10 @@ if command -v ufw >/dev/null 2>&1; then
 fi
 
 if [ "$LOGGED_IN" = yes ]; then
-  systemctl restart hermes-fast.service hermes-deep.service
-  echo "Done. Check: curl -s http://127.0.0.1:8642/health ; curl -s http://127.0.0.1:8643/health"
+  systemctl restart hermes-gateway.service
+  echo "Done. Check (with the key in a header file): curl -H @hdr http://127.0.0.1:8642/p/fast/v1/models"
 else
-  echo "Installed. Next, log in to OpenAI Codex (device code), then start the services:"
+  echo "Installed. Next, log in to OpenAI Codex (device code), then start the gateway:"
   echo "  sudo -u $HERMES_USER -H $HERMES_BIN auth add openai-codex"
-  echo "  systemctl restart hermes-fast.service hermes-deep.service"
+  echo "  systemctl restart hermes-gateway.service"
 fi

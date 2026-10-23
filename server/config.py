@@ -23,9 +23,10 @@ class Settings:
     elevenlabs_api_key: str = field(repr=False)
     elevenlabs_voice_id: str
     hermes_api_key: str = field(repr=False)
-    hermes_fast_url: str = "http://127.0.0.1:8642"
-    hermes_deep_url: str = "http://127.0.0.1:8643"
+    hermes_fast_url: str = "http://127.0.0.1:8642/p/fast"
+    hermes_deep_url: str = "http://127.0.0.1:8642/p/deep"
     stt_model: str = "base"
+    tts_model: str = "eleven_turbo_v2_5"
     device_tokens: dict[str, str] = field(default_factory=dict, repr=False)
     canned_dir: Path = Path("cache/canned")
 
@@ -38,6 +39,7 @@ class Settings:
             hermes_fast_url=env.get("HERMES_FAST_URL", cls.hermes_fast_url),
             hermes_deep_url=env.get("HERMES_DEEP_URL", cls.hermes_deep_url),
             stt_model=env.get("STT_MODEL", cls.stt_model),
+            tts_model=env.get("TTS_MODEL", cls.tts_model),
             device_tokens=_parse_device_tokens(env.get("DEVICE_TOKENS", "")),
             canned_dir=Path(env.get("CANNED_DIR", str(cls.canned_dir))),
         )

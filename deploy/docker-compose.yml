@@ -3,7 +3,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    # Host networking so the gateway reaches Hermes on 127.0.0.1:8642/8643.
+    # Host networking so the gateway reaches the Hermes host gateway on 127.0.0.1:8642.
     # The image CMD binds uvicorn to 127.0.0.1:8000 only.
     network_mode: host
     env_file: .env
