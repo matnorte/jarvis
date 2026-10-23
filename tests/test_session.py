@@ -181,16 +181,22 @@ async def test_empty_transcript_skips_router():
     assert h2.router.calls == [] and h2.sent == [{"type": "state", "state": "idle"}]
 
 
+def audio_and_states(h):
+    """States and audio in send order; a run of reply AUDIO counts once."""
+    out = []
+    for m in h.sent:
+        item = m if isinstance(m, bytes) else m["state"] if is_type("state")(m) else None
+        if item is not None and not (item == AUDIO and out and out[-1] == AUDIO):
+            out.append(item)
+    return out
+
+
 async def test_escalation_sends_deep_state_and_ack_audio():
     h = Harness(router=FakeRouter([Escalated(), Delta("The deep answer, sir. ")]))
     await h.session.on_text("explain relativity", "pt")
     await h.session.join()
-    deep = h.index(is_state("deep"))
-    ack = h.index(lambda m: m == CANNED)
-    audio = h.index(lambda m: m == AUDIO)
-    assert deep < ack < audio
-    assert h.sent[ack - 1] == {"type": "state", "state": "speaking"}
-    assert h.states().count("speaking") == 1
+    assert audio_and_states(h) == ["thinking", "speaking", CANNED, "deep",
+                                   "speaking", AUDIO, "idle"]
     assert h.canned.requests == [("ack_deep", "pt")]
     assert h.tts.langs == ["pt"] and " ".join(h.tts.chunks) == "The deep answer, sir."
     assert h.router.calls == [("dev", "explain relativity", "pt")]
@@ -204,8 +210,8 @@ async def test_one_moment_plays_once_after_1_5s():
     await h.session.join()
     assert h.canned.requests == [("one_moment", "en")]
     assert [m for m in h.sent if m == CANNED] == [CANNED]
-    assert h.index(lambda m: m == CANNED) < h.index(lambda m: m == AUDIO)
-    assert h.states().count("speaking") == 1
+    assert audio_and_states(h) == ["thinking", "speaking", CANNED, "thinking",
+                                   "speaking", AUDIO, "idle"]
     assert h.sent[-2:] == [{"type": "speaking_done"}, {"type": "state", "state": "idle"}]
 
 
@@ -266,8 +272,9 @@ async def test_router_error_speaks_error_line():
     assert h.sent[err]["code"] == "llm_failed"
     assert secret not in h.sent[err]["message"] and h.sent[err]["message"]
     tail = h.no_levels()[-4:]
-    assert tail == [h.sent[err], {"type": "state", "state": "speaking"}, CANNED,
+    assert tail == [h.sent[err], {"type": "state", "state": "error"}, CANNED,
                     {"type": "state", "state": "idle"}]
+    assert "speaking" not in h.states()
     assert h.canned.requests == [("error", "pt")]
     assert h.router.closed and other_tasks() == []
 
@@ -278,7 +285,8 @@ async def test_tts_error_speaks_error_line():
     await h.session.join()
     err = h.msgs("error")
     assert [e["code"] for e in err] == ["tts_failed"]
-    assert h.sent[-2:] == [CANNED, {"type": "state", "state": "idle"}]
+    assert h.no_levels()[-4:] == [err[0], {"type": "state", "state": "error"}, CANNED,
+                                  {"type": "state", "state": "idle"}]
     assert {"type": "speaking_done"} not in h.sent
     assert h.router.closed and other_tasks() == []
 
@@ -288,6 +296,7 @@ async def test_stt_error_speaks_error_line():
     await speak(h)
     assert [e["code"] for e in h.msgs("error")] == ["stt_failed"]
     assert h.router.calls == []
+    assert h.states() == ["listening", "thinking", "error", "idle"]
     assert h.sent[-2:] == [CANNED, {"type": "state", "state": "idle"}]
 
 
@@ -403,3 +412,40 @@ async def test_empty_hermes_reply_speaks_error_line():
     assert CANNED in h.sent and {"type": "speaking_done"} not in h.sent
     assert h.sent[-1] == {"type": "state", "state": "idle"}
     assert other_tasks() == []
+
+
+async def test_filler_then_reply_rearms_speaking():
+    h = Harness(router=FakeRouter([0.3, Delta("Right away, sir. ")]), filler_after=0.05)
+    await h.session.on_text("do the thing")
+    await h.session.join()
+    assert h.canned.requests == [("one_moment", "en")]
+    assert audio_and_states(h) == ["thinking", "speaking", CANNED, "thinking",
+                                   "speaking", AUDIO, "idle"]
+
+
+async def test_escalation_then_deep_audio_rearms_speaking():
+    h = Harness(router=FakeRouter([Escalated(), 0.1, Delta("First part. "), 0.05,
+                                   Delta("Second part.")]))
+    await h.session.on_text("hard question")
+    await h.session.join()
+    assert audio_and_states(h) == ["thinking", "speaking", CANNED, "deep",
+                                   "speaking", AUDIO, "idle"]
+    assert h.sent[-2:] == [{"type": "speaking_done"}, {"type": "state", "state": "idle"}]
+
+
+async def test_filler_then_escalation():
+    h = Harness(router=FakeRouter([0.3, Escalated(), 0.1, Delta("Deep reply here. ")]),
+                filler_after=0.05)
+    await h.session.on_text("hard question", "pt")
+    await h.session.join()
+    assert h.canned.requests == [("one_moment", "pt"), ("ack_deep", "pt")]
+    assert audio_and_states(h) == ["thinking", "speaking", CANNED, "thinking",
+                                   "speaking", CANNED, "deep", "speaking", AUDIO, "idle"]
+
+
+async def test_deep_state_sent_even_without_ack_audio():
+    h = Harness(router=FakeRouter([Escalated(), Delta("Deep reply here. ")]))
+    h.canned.get = lambda key, lang: b""  # canned line missing on disk
+    await h.session.on_text("hard question")
+    await h.session.join()
+    assert audio_and_states(h) == ["thinking", "deep", "speaking", AUDIO, "idle"]

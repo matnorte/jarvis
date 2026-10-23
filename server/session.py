@@ -280,8 +280,7 @@ class Session:
                     if isinstance(ev, Escalated):
                         got_reply.set()
                         await speakers[-1].finish()
-                        await self._send_text(protocol.state("deep"))
-                        await self._play(self._canned.get("ack_deep", lang))
+                        await self._play_line(self._canned.get("ack_deep", lang), "deep")
                         speakers.append(_Speaker(self, lang))
                     elif isinstance(ev, Delta) and ev.text:
                         got_reply.set()
@@ -312,12 +311,32 @@ class Session:
             return
         except TimeoutError:
             pass
-        await self._play(self._canned.get("one_moment", lang))
+        await self._play_line(self._canned.get("one_moment", lang), "thinking", got_reply)
 
     async def _fail(self, code: str, lang: str) -> None:
+        # The error line plays under state "error", never "speaking".
         await self._send_text(protocol.error(code, _MESSAGES[code]))
-        await self._play(self._canned.get("error", lang))
+        async with self._audio_lock:
+            await self._send_text(protocol.state("error"))
+            await self._emit(self._canned.get("error", lang))
         await self._send_text(protocol.state("idle"))
+
+    async def _play_line(
+        self, audio: bytes, after: str, skip_if: asyncio.Event | None = None
+    ) -> None:
+        """Play a canned line, then show `after` and re-arm "speaking" so the
+        next reply audio announces itself again. The lock keeps reply audio
+        from interleaving. `skip_if`: drop the line if set by the time the lock
+        is ours (the filler is moot once the reply has started)."""
+        async with self._audio_lock:
+            if skip_if is not None and skip_if.is_set():
+                return
+            if audio:
+                if not self._speaking:
+                    await self._send_text(protocol.state("speaking"))
+                await self._emit(audio)
+            await self._send_text(protocol.state(after))
+            self._speaking = False
 
     async def _play(self, audio: bytes) -> None:
         if not audio:
@@ -326,8 +345,14 @@ class Session:
             if not self._speaking:
                 self._speaking = True
                 await self._send_text(protocol.state("speaking"))
-            await self._send_bytes(audio)
-            self._out_ms += len(audio) // 2 * 1000.0 / OUT_RATE
-            if self._out_ms >= LEVEL_EVERY_MS:
-                self._out_ms = 0.0
-                await self._send_text(protocol.level(0.0, _rms_level(audio)))
+            await self._emit(audio)
+
+    async def _emit(self, audio: bytes) -> None:
+        """Send audio and throttled out-levels; the caller holds the audio lock."""
+        if not audio:
+            return
+        await self._send_bytes(audio)
+        self._out_ms += len(audio) // 2 * 1000.0 / OUT_RATE
+        if self._out_ms >= LEVEL_EVERY_MS:
+            self._out_ms = 0.0
+            await self._send_text(protocol.level(0.0, _rms_level(audio)))
