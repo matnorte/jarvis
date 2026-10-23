@@ -41,3 +41,13 @@ Firewall allows only 22, 80, 443. Hermes (8642) and the gateway (8000) bind 127.
 `talk` streams a 16 kHz mono wav and writes the reply to a 24 kHz wav. `bench` prints
 end-of-upload -> transcript / first reply text / first audio per sample and exits non-zero
 if the median to first audio exceeds 2.0 s.
+
+## Android
+
+Native Kotlin client in `android/` (package `com.openclawchip.jarvis`, minSdk 31).
+Build and run the JVM tests with Android Studio's JDK and an SDK path in
+`android/local.properties` (`sdk.dir=...`, git-ignored):
+
+    cd android && ./gradlew testDebugUnitTest assembleDebug
+
+The debug APK lands in `android/app/build/outputs/apk/debug/app-debug.apk`.
