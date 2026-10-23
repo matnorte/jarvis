@@ -82,7 +82,9 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
                 await http.aclose()
 
     app = FastAPI(lifespan=lifespan)
-    active: dict[str, _Conn] = {}
+    active: dict[str, _Conn] = {}  # newest registered connection per device
+    live: dict[str, _Conn] = {}  # connection owning a started Session
+    locks: dict[str, asyncio.Lock] = {}
 
     @app.get("/health")
     async def health() -> dict:
@@ -97,29 +99,42 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
 
         conn = _Conn(ws)
         previous = active.get(device)
-        active[device] = conn
+        active[device] = conn  # newest connection wins, synchronously
         try:
             if previous is not None:
                 await _safe_close(previous.ws, CLOSE_REPLACED)
-                if previous.session is not None:
-                    await previous.session.close()
+            async with locks.setdefault(device, asyncio.Lock()):
+                # Serialized per device: replaced waiters bail out here, and
+                # the newest one starts only after the live session closed.
+                if active.get(device) is not conn:
+                    await _safe_close(ws, CLOSE_REPLACED)
+                    return
+                old = live.get(device)
+                if old is not None and old is not conn:
+                    await _safe_close(old.ws, CLOSE_REPLACED)
+                    if old.session is not None:
+                        await old.session.close()
+                if active.get(device) is not conn:
+                    await _safe_close(ws, CLOSE_REPLACED)
+                    return
 
-            async def send_text(data: str) -> None:
-                try:
-                    await ws.send_text(data)
-                except Exception as exc:  # socket already closed
-                    log.debug("send_text dropped: %s", type(exc).__name__)
+                async def send_text(data: str) -> None:
+                    try:
+                        await ws.send_text(data)
+                    except Exception as exc:  # socket already closed
+                        log.debug("send_text dropped: %s", type(exc).__name__)
 
-            async def send_bytes(data: bytes) -> None:
-                try:
-                    await ws.send_bytes(data)
-                except Exception as exc:
-                    log.debug("send_bytes dropped: %s", type(exc).__name__)
+                async def send_bytes(data: bytes) -> None:
+                    try:
+                        await ws.send_bytes(data)
+                    except Exception as exc:
+                        log.debug("send_bytes dropped: %s", type(exc).__name__)
 
-            conn.session = Session(
-                device, send_text, send_bytes,
-                deps.stt, deps.router, deps.tts, deps.canned,
-            )
+                conn.session = Session(
+                    device, send_text, send_bytes,
+                    deps.stt, deps.router, deps.tts, deps.canned,
+                )
+                live[device] = conn
             await _pump(ws, conn.session, send_text)
         except WebSocketDisconnect:
             pass
@@ -128,6 +143,8 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
                 await conn.session.close()
             if active.get(device) is conn:
                 del active[device]
+            if live.get(device) is conn:
+                del live[device]
 
     async def _authenticate(ws: WebSocket) -> str | None:
         device = None

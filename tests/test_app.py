@@ -172,3 +172,55 @@ def test_different_devices_coexist():
         b.send_text(hello("tok-desk"))
         a.send_text(json.dumps({"type": "text", "text": "hi"}))
         assert json.loads(a.receive_text())["type"] == "state"
+
+
+def test_replacement_race_keeps_single_live_session(monkeypatch):
+    import threading
+    import time
+
+    import server.app as app_mod
+
+    gate = threading.Event()
+    created = []  # (name, live sessions at creation)
+    live = []
+    peak = [0]
+
+    class HeldSession:
+        def __init__(self, device, send_text, send_bytes, *deps):
+            created.append((len(created), len(live)))
+            live.append(self)
+            peak[0] = max(peak[0], len(live))
+            self.first = len(created) == 1
+            self.send_text = send_text
+
+        async def close(self):
+            if self.first:
+                while not gate.is_set():
+                    await asyncio.sleep(0.005)
+            if self in live:
+                live.remove(self)
+
+        async def on_text(self, text, lang="en"):
+            await self.send_text(json.dumps({"type": "state", "state": "thinking"}))
+
+    import asyncio
+
+    monkeypatch.setattr(app_mod, "Session", HeldSession)
+    client, _ = make()
+    with client.websocket_connect("/ws") as a:
+        a.send_text(hello())
+        time.sleep(0.1)
+        with client.websocket_connect("/ws") as b:
+            b.send_text(hello())  # blocks on A's held close()
+            time.sleep(0.1)
+            with client.websocket_connect("/ws") as c:
+                c.send_text(hello())
+                time.sleep(0.1)
+                gate.set()
+                assert closed_code(a) == 4409
+                assert closed_code(b) == 4409
+                c.send_text(json.dumps({"type": "text", "text": "hi"}))
+                assert json.loads(c.receive_text())["type"] == "state"
+    assert len(created) == 2  # A and C only; B never started a Session
+    assert created[1][1] == 0  # C started after A's close() completed
+    assert peak[0] == 1
