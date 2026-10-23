@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jarvis Orb</title>
+<style>
+  :root { --bg: #030303; --gold: #ffb400; --text: #ffd27a; --muted: #a07a3a; }
+  html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; font-family: system-ui, sans-serif; }
+  canvas { display: block; }
+  #ui { position: absolute; left: 0; right: 0; bottom: 16px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding: 0 16px; }
+  #ui button { background: rgba(255,180,0,0.06); color: var(--text); border: 1px solid rgba(255,180,0,0.35); border-radius: 6px; padding: 8px 14px; font-size: 13px; cursor: pointer; letter-spacing: .04em; }
+  #ui button.on { background: rgba(255,180,0,0.22); border-color: var(--gold); }
+  @media (max-width: 600px) { #ui { gap: 4px; bottom: 8px; } #ui button { padding: 4px 8px; font-size: 11px; } }
+  #label { position: absolute; top: 16px; left: 0; right: 0; text-align: center; color: var(--muted); font-size: 12px; letter-spacing: .3em; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div id="label">idle</div>
+<div id="ui">
+  <button data-s="idle" class="on">Idle</button>
+  <button data-s="listening">Listening</button>
+  <button data-s="thinking">Thinking</button>
+  <button data-s="deep">Deep</button>
+  <button data-s="speaking">Speaking</button>
+  <button data-s="error">Error</button>
+  <button id="mic">Use mic</button>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script>
+// Jarvis hologram orb prototype. Public API: JarvisOrb.setState(name), JarvisOrb.setLevel(0..1)
+const STATES = {
+  idle:      { scale: 1.00, bright: 0.55, spin: 0.15, ringSpin: 0.25, bloom: 1.1, color: 0xffa200, jitter: 0.00, sparks: 0.4 },
+  listening: { scale: 1.08, bright: 0.85, spin: 0.25, ringSpin: 0.45, bloom: 1.5, color: 0xffb400, jitter: 0.10, sparks: 1.0 },
+  thinking:  { scale: 1.02, bright: 0.80, spin: 0.70, ringSpin: 1.80, bloom: 1.5, color: 0xff9a00, jitter: 0.02, sparks: 1.6 },
+  deep:      { scale: 1.10, bright: 1.00, spin: 0.90, ringSpin: 2.40, bloom: 2.1, color: 0xffd36b, jitter: 0.04, sparks: 2.4 },
+  speaking:  { scale: 1.05, bright: 0.90, spin: 0.30, ringSpin: 0.60, bloom: 1.7, color: 0xffb400, jitter: 0.14, sparks: 1.2 },
+  error:     { scale: 0.96, bright: 0.40, spin: 0.08, ringSpin: 0.10, bloom: 0.9, color: 0xff3a10, jitter: 0.05, sparks: 0.2 },
+};
+const cur = Object.assign({}, STATES.idle, { colorObj: new THREE.Color(STATES.idle.color) });
+let target = STATES.idle, stateName = 'idle', level = 0, levelSmoothed = 0, micLevel = null;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(0, 0, 7);
+
+const orb = new THREE.Group();
+scene.add(orb);
+
+function dotTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(255,255,255,0.6)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
+const DOT = dotTexture();
+const additive = (opts) => Object.assign({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }, opts);
+
+function onSphere(r, theta, phi) {
+  return new THREE.Vector3(r * Math.sin(phi) * Math.cos(theta), r * Math.cos(phi), r * Math.sin(phi) * Math.sin(theta));
+}
+
+// Shell: circuit-trace segments running along latitude/longitude, at several radii
+const traceMats = [];
+function buildTraces(count, rMin, rMax, opacity) {
+  const pos = [], col = [];
+  for (let i = 0; i < count; i++) {
+    const r = rMin + Math.random() * (rMax - rMin);
+    let theta = Math.random() * Math.PI * 2, phi = Math.acos(2 * Math.random() - 1);
+    const steps = 2 + Math.floor(Math.random() * 4);
+    let p = onSphere(r, theta, phi);
+    for (let s = 0; s < steps; s++) {
+      if (Math.random() < 0.5) theta += (Math.random() - 0.5) * 0.35; else phi += (Math.random() - 0.5) * 0.25;
+      const q = onSphere(r, theta, phi);
+      pos.push(p.x, p.y, p.z, q.x, q.y, q.z);
+      const b = 0.5 + Math.random() * 0.5;
+      col.push(b, b * 0.75, b * 0.25, b, b * 0.75, b * 0.25);
+      p = q;
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  const mat = new THREE.LineBasicMaterial(additive({ vertexColors: true, opacity }));
+  traceMats.push({ mat, base: opacity });
+  return new THREE.LineSegments(geo, mat);
+}
+const shellOuter = buildTraces(2200, 1.85, 2.15, 0.7);
+const shellInner = buildTraces(1200, 1.25, 1.6, 0.45);
+orb.add(shellOuter, shellInner);
+
+// Shell dust: points concentrated in "panels"
+const dustMats = [];
+function buildDust(count, rMin, rMax, size, opacity) {
+  const pos = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const cluster = Math.random() < 0.7;
+    const theta = cluster ? Math.round(Math.random() * 24) / 24 * Math.PI * 2 + (Math.random() - 0.5) * 0.12 : Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    const v = onSphere(rMin + Math.random() * (rMax - rMin), theta, phi);
+    pos.set([v.x, v.y, v.z], i * 3);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.PointsMaterial(additive({ map: DOT, size, color: 0xffb400, opacity, sizeAttenuation: true }));
+  dustMats.push({ mat, base: opacity });
+  return new THREE.Points(geo, mat);
+}
+const dust = buildDust(9000, 1.3, 2.2, 0.028, 0.45);
+orb.add(dust);
+
+// Rings and arcs at different tilts
+const rings = [];
+function arc(radius, start, length, width, opacity) {
+  const pts = [];
+  for (let i = 0; i <= 96; i++) { const a = start + length * i / 96; pts.push(new THREE.Vector3(Math.cos(a) * radius, Math.sin(a) * radius, 0)); }
+  const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 96, width, 6, false);
+  return new THREE.Mesh(geo, new THREE.MeshBasicMaterial(additive({ color: 0xffb400, opacity })));
+}
+[
+  { r: 1.15, tilt: [1.2, 0.3, 0], speed: 0.9,  arcs: [[0, 4.6, 0.012]] },
+  { r: 0.95, tilt: [0.4, 1.1, 0], speed: -1.3, arcs: [[0, 2.2, 0.018], [3.2, 1.6, 0.010]] },
+  { r: 0.70, tilt: [0.2, 0.2, 0], speed: 1.7,  arcs: [[0, 5.4, 0.022]] },
+  { r: 1.45, tilt: [1.6, 0, 0.5], speed: -0.6, arcs: [[0, 1.2, 0.008], [2.0, 0.8, 0.008], [4.0, 1.5, 0.008]] },
+  { r: 2.25, tilt: [1.4, 0.2, 0], speed: 0.35, arcs: [[0, 1.0, 0.006], [3.0, 0.6, 0.006]] },
+].forEach(cfg => {
+  const g = new THREE.Group();
+  cfg.arcs.forEach(([s, l, w]) => g.add(arc(cfg.r, s, l, w, 0.85)));
+  g.rotation.set(...cfg.tilt);
+  g.userData.speed = cfg.speed;
+  rings.push(g); orb.add(g);
+});
+
+// Core: bright ring plus glow sprite
+const core = new THREE.Group();
+const coreRing = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.035, 12, 64), new THREE.MeshBasicMaterial(additive({ color: 0xfff3c4, opacity: 1 })));
+const coreGlow = new THREE.Sprite(new THREE.SpriteMaterial(additive({ map: DOT, color: 0xffc04d, opacity: 0.9 })));
+coreGlow.scale.set(0.9, 0.9, 1);
+coreGlow.material.opacity = 0.6;
+core.add(coreRing, coreGlow); orb.add(core);
+const halo = new THREE.Sprite(new THREE.SpriteMaterial(additive({ map: DOT, color: 0xff8a00, opacity: 0.18 })));
+halo.scale.set(7, 7, 1); orb.add(halo);
+
+// Sparks flying off the shell
+const SPARKS = 600;
+const sparkPos = new Float32Array(SPARKS * 3), sparkVel = new Float32Array(SPARKS * 3), sparkLife = new Float32Array(SPARKS);
+const sparkGeo = new THREE.BufferGeometry();
+sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparkPos, 3));
+const sparkMat = new THREE.PointsMaterial(additive({ map: DOT, size: 0.07, color: 0xffd27a, opacity: 0.9 }));
+const sparks = new THREE.Points(sparkGeo, sparkMat);
+scene.add(sparks);
+function spawnSpark(i) {
+  const v = onSphere(1.9 + Math.random() * 0.3, Math.random() * Math.PI * 2, Math.acos(2 * Math.random() - 1));
+  sparkPos.set([v.x, v.y, v.z], i * 3);
+  const n = v.clone().normalize().multiplyScalar(0.4 + Math.random() * 1.2);
+  sparkVel.set([n.x, n.y, n.z], i * 3);
+  sparkLife[i] = 0.6 + Math.random() * 1.4;
+}
+for (let i = 0; i < SPARKS; i++) sparkLife[i] = 0;
+
+// Post-processing bloom (falls back to plain render if addons failed to load)
+let composer = null, bloom = null;
+if (THREE.EffectComposer && THREE.UnrealBloomPass) {
+  composer = new THREE.EffectComposer(renderer);
+  composer.addPass(new THREE.RenderPass(scene, camera));
+  bloom = new THREE.UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.9, 0.45, 0.22);
+  composer.addPass(bloom);
+}
+
+// Mouse parallax
+let mx = 0, my = 0;
+addEventListener('pointermove', e => { mx = e.clientX / innerWidth - 0.5; my = e.clientY / innerHeight - 0.5; });
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight); if (composer) composer.setSize(innerWidth, innerHeight);
+});
+
+const clock = new THREE.Clock();
+const lerp = (a, b, t) => a + (b - a) * t;
+function frame() {
+  const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime, k = 1 - Math.exp(-dt * 3);
+  for (const key of ['scale', 'bright', 'spin', 'ringSpin', 'bloom', 'jitter', 'sparks']) cur[key] = lerp(cur[key], target[key], k);
+  cur.colorObj.lerp(new THREE.Color(target.color), k);
+
+  // Demo level: real mic if enabled, otherwise synthetic speech-like envelope
+  const synthetic = (stateName === 'listening' || stateName === 'speaking')
+    ? Math.max(0, Math.sin(t * 7) * 0.5 + Math.sin(t * 13.3) * 0.3 + Math.sin(t * 2.1) * 0.4) : 0;
+  level = micLevel !== null ? micLevel : synthetic;
+  levelSmoothed = lerp(levelSmoothed, level, 1 - Math.exp(-dt * 12));
+
+  const pulse = 1 + levelSmoothed * cur.jitter * 2.2 + Math.sin(t * 1.3) * 0.012;
+  orb.scale.setScalar(cur.scale * pulse);
+  orb.rotation.y += dt * cur.spin;
+  orb.rotation.x = lerp(orb.rotation.x, my * 0.4, 0.05);
+  orb.rotation.z = lerp(orb.rotation.z, -mx * 0.3, 0.05);
+  shellInner.rotation.y -= dt * cur.spin * 1.6;
+  rings.forEach(r => { r.rotation.z += dt * r.userData.speed * cur.ringSpin; });
+  core.rotation.z -= dt * (0.8 + cur.ringSpin);
+  core.lookAt(camera.position);
+  coreGlow.scale.setScalar(0.8 + levelSmoothed * 0.6 + Math.sin(t * 3) * 0.04);
+
+  const flicker = stateName === 'error' ? (Math.random() < 0.08 ? 0.3 : 1) : 1;
+  const b = cur.bright * flicker;
+  traceMats.forEach(m => { m.mat.opacity = m.base * b; m.mat.color = cur.colorObj; });
+  dustMats.forEach(m => { m.mat.opacity = m.base * b; m.mat.color.copy(cur.colorObj); });
+  rings.forEach(r => r.children.forEach(c => { c.material.opacity = 0.85 * b; c.material.color.copy(cur.colorObj); }));
+  coreRing.material.opacity = Math.min(1, b + 0.2);
+  halo.material.color.copy(cur.colorObj); halo.material.opacity = 0.05 + 0.07 * b;
+  sparkMat.color.copy(cur.colorObj).lerp(new THREE.Color(0xffffff), 0.35);
+
+  for (let i = 0; i < SPARKS; i++) {
+    if (sparkLife[i] <= 0) { if (Math.random() < cur.sparks * dt * 0.8) spawnSpark(i); else { sparkPos[i * 3 + 1] = 999; continue; } }
+    sparkLife[i] -= dt;
+    for (let a = 0; a < 3; a++) sparkPos[i * 3 + a] += sparkVel[i * 3 + a] * dt;
+  }
+  sparkGeo.attributes.position.needsUpdate = true;
+
+  if (bloom) { bloom.strength = cur.bloom * 0.6 * (0.8 + levelSmoothed * 0.4); composer.render(); }
+  else renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+frame();
+
+window.JarvisOrb = {
+  setState(name) {
+    if (!STATES[name]) return;
+    stateName = name; target = STATES[name];
+    document.getElementById('label').textContent = name;
+    document.querySelectorAll('#ui button[data-s]').forEach(b => b.classList.toggle('on', b.dataset.s === name));
+  },
+  setLevel(v) { micLevel = Math.max(0, Math.min(1, v)); },
+};
+document.querySelectorAll('#ui button[data-s]').forEach(b => b.onclick = () => JarvisOrb.setState(b.dataset.s));
+
+document.getElementById('mic').onclick = async (e) => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const ctx = new AudioContext(), an = ctx.createAnalyser(); an.fftSize = 512;
+    ctx.createMediaStreamSource(stream).connect(an);
+    const buf = new Uint8Array(an.fftSize);
+    (function poll() {
+      an.getByteTimeDomainData(buf);
+      let sum = 0; for (const v of buf) sum += ((v - 128) / 128) ** 2;
+      micLevel = Math.min(1, Math.sqrt(sum / buf.length) * 6);
+      requestAnimationFrame(poll);
+    })();
+    e.target.classList.add('on'); e.target.textContent = 'Mic on';
+    JarvisOrb.setState('listening');
+  } catch { e.target.textContent = 'Mic blocked'; }
+};
+</script>
+</body>
+</html>
