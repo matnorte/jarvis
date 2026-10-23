@@ -17,7 +17,8 @@ routing rule) and `persona/SOUL.deep.md` (deep profile, same persona without it)
    then `sudo bash deploy/install-hermes.sh`. Log in to OpenAI Codex once (device code,
    shared by both profiles):
    `sudo -u hermes -H /home/hermes/.local/bin/hermes auth add openai-codex`, then
-   `systemctl restart hermes-fast hermes-deep`. Models can be overridden with
+   `systemctl restart hermes-gateway` (one Hermes gateway serves both profiles at
+   `127.0.0.1:8642/p/fast` and `/p/deep`). Models can be overridden with
    `FAST_MODEL=... DEEP_MODEL=...` when running the script.
    Read the `# VERIFY:` notes in the script header; they list steps not confirmed
    against the Hermes docs.
@@ -30,7 +31,7 @@ routing rule) and `persona/SOUL.deep.md` (deep profile, same persona without it)
    `docker compose -f deploy/docker-compose.yml up -d` to reload the env file
    (`docker compose restart` does not, so a revoked token would keep working).
 
-Firewall allows only 22, 80, 443. Hermes (8642/8643) and the gateway (8000) bind 127.0.0.1.
+Firewall allows only 22, 80, 443. Hermes (8642) and the gateway (8000) bind 127.0.0.1.
 
 ## Tools
 
