@@ -29,9 +29,11 @@ class FakeSTT:
 class FakeRouter:
     """Script items: Escalated/Delta events, or a float to sleep first."""
 
-    def __init__(self, script, raises=None):
+    def __init__(self, script, raises=None, cleanup_sleep=0.0, cleanup_raises=None):
         self.script = script
         self.raises = raises
+        self.cleanup_sleep = cleanup_sleep
+        self.cleanup_raises = cleanup_raises
         self.calls = []
         self.closed = False
 
@@ -47,6 +49,10 @@ class FakeRouter:
                 raise self.raises
         finally:
             self.closed = True
+            if self.cleanup_sleep:  # e.g. awaiting network closes
+                await asyncio.sleep(self.cleanup_sleep)
+            if self.cleanup_raises:
+                raise self.cleanup_raises
 
 
 class FakeTTS:
@@ -321,3 +327,51 @@ async def test_interrupt_before_turn_starts():
     await h.session.on_interrupt()  # turn task has not run a single step yet
     assert h.sent == [{"type": "state", "state": "listening"}]
     assert h.router.calls == [] and other_tasks() == []
+
+
+async def test_close_while_interrupt_is_reaping():
+    h = Harness(router=FakeRouter([Delta("First sentence here. "), 5.0, Delta("Never said.")],
+                                  cleanup_sleep=0.5))
+    await h.session.on_text("talk to me")
+    await h.wait_for(lambda m: m == AUDIO)
+    interrupting = asyncio.create_task(h.session.on_interrupt())
+    await asyncio.sleep(0.05)  # the turn is now inside the router's cleanup
+    assert h.router.closed and not interrupting.done()
+    mark = len(h.sent)
+    await h.session.close()  # second cancel lands on the router's cleanup
+    assert len(h.sent) == mark
+    await interrupting
+    await asyncio.sleep(0.05)
+    assert len(h.sent) == mark
+    assert h.tts.closed == h.tts.started == 1
+    assert other_tasks() == []
+
+
+async def test_router_cleanup_error_on_interrupt_still_reaps():
+    h = Harness(router=FakeRouter([Delta("First sentence here. "), 5.0, Delta("Never said.")],
+                                  cleanup_raises=RuntimeError("cleanup boom")))
+    await h.session.on_text("talk to me")
+    await h.wait_for(lambda m: m == AUDIO)
+    mark = len(h.sent)
+    await h.session.on_interrupt()
+    assert h.sent[mark:] == [{"type": "state", "state": "listening"}]
+    assert h.tts.closed == h.tts.started == 1 and other_tasks() == []
+    await asyncio.sleep(0.05)
+    assert h.sent[mark:] == [{"type": "state", "state": "listening"}]
+
+
+async def test_router_aclose_error_still_reaps_speaker():
+    # TTS fails while the router is suspended at a yield; its aclose() then raises.
+    h = Harness(router=FakeRouter([Delta("First sentence here. "), 0.1, Delta("Second one. "),
+                                   Delta("Third one. ")],
+                                  cleanup_raises=RuntimeError("cleanup boom")),
+                tts=FakeTTS(raises=TTSError("quota")))
+    await h.session.on_text("talk to me")
+    await h.session.join()
+    assert [e["code"] for e in h.msgs("error")] == ["tts_failed"]
+    assert h.sent[-2:] == [CANNED, {"type": "state", "state": "idle"}]
+    assert h.router.closed and h.tts.closed == h.tts.started == 1
+    assert other_tasks() == []
+    mark = len(h.sent)
+    await asyncio.sleep(0.05)
+    assert len(h.sent) == mark

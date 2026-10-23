@@ -46,15 +46,32 @@ def _rms_level(pcm16: bytes) -> float:
 
 
 async def _reap(*tasks: asyncio.Task | None) -> None:
-    """Cancel tasks, wait for them, and retrieve their outcome."""
+    """Cancel tasks, wait until they are all done, and retrieve their outcome.
+
+    If the caller is itself cancelled meanwhile, keep waiting (so no child
+    outlives this call) and re-raise the cancellation afterwards.
+    """
     live = [t for t in tasks if t is not None]
     for t in live:
         t.cancel()
-    if live:
-        await asyncio.wait(live)
+    interrupted = False
+    while not all(t.done() for t in live):
+        try:
+            await asyncio.wait(live)
+        except asyncio.CancelledError:
+            interrupted = True
     for t in live:
         if not t.cancelled():
             t.exception()
+    if interrupted:
+        raise asyncio.CancelledError
+
+
+def _raise_if_cancelling() -> None:
+    """A callee may turn our CancelledError into another error; honour the cancel."""
+    task = asyncio.current_task()
+    if task is not None and task.cancelling():
+        raise asyncio.CancelledError
 
 
 class _Speaker:
@@ -98,8 +115,10 @@ class _Speaker:
         except Exception as exc:
             raise _StageError("tts_failed") from exc
         finally:
-            await synth.aclose()
-            await chunks.aclose()
+            try:
+                await synth.aclose()
+            finally:
+                await chunks.aclose()
 
 
 class Session:
@@ -169,6 +188,8 @@ class Session:
         if self._closed:
             return
         await _reap(self._turn)
+        if self._closed:  # close() ran while we were cancelling
+            return
         self._reset_input()
         if len(text.strip()) < 2:
             await self._send_text(protocol.state("idle"))
@@ -179,6 +200,8 @@ class Session:
         if self._closed:
             return
         await _reap(self._turn)
+        if self._closed:  # close() ran while we were cancelling
+            return
         self._reset_input()
         self._listening = True
         await self._send_text(protocol.state("listening"))
@@ -218,6 +241,7 @@ class Session:
         try:
             tr = await self._stt.transcribe(pcm)
         except Exception as exc:
+            _raise_if_cancelling()
             log.warning("stt failed: %s", type(exc).__name__)
             await self._fail("stt_failed", "en")
             return
@@ -262,15 +286,23 @@ class Session:
                         await self._send_text(protocol.reply_text(ev.text))
                         await speakers[-1].feed(ev.text)
             except _StageError:
+                _raise_if_cancelling()
                 raise
             except Exception as exc:
+                _raise_if_cancelling()
                 raise _StageError("llm_failed") from exc
             await speakers[-1].finish()
             got_reply.set()
             await filler  # returns at once unless the filler is mid-play
         finally:
-            await events.aclose()
-            await _reap(filler, *(s.task for s in speakers))
+            # Children are reaped however router cleanup ends (error or a
+            # second cancel), so no TTS stream outlives the turn.
+            try:
+                await events.aclose()
+            except Exception as exc:
+                log.warning("router cleanup failed: %s", type(exc).__name__)
+            finally:
+                await _reap(filler, *(s.task for s in speakers))
 
     async def _filler(self, lang: str, got_reply: asyncio.Event) -> None:
         try:
