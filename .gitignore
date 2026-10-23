@@ -1,1 +1,7 @@
 .superpowers/
+.env
+cache/
+.venv/
+__pycache__/
+*.pcm
+*.wav

@@ -1,0 +1,16 @@
+[Unit]
+Description=Hermes Agent (deep profile, claude-opus-5-5, 127.0.0.1:8643)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hermes
+# VERIFY: `hermes -p <profile> gateway` per the API-server docs; confirm it stays in the foreground.
+ExecStart=/home/hermes/.local/bin/hermes -p deep gateway
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
