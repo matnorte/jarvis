@@ -1,6 +1,11 @@
 # JARVIS — Backend, Persona and Hologram UI Design
 
-Date: 2026-10-23 · Status: draft for user review
+Date: 2026-10-23 · Status: approved, implemented
+
+> **Revisions after implementation (2026-10-23)**
+> - LLM: OpenAI via ChatGPT/Codex subscription OAuth (Hermes provider `openai-codex`) instead of Anthropic: fast profile `gpt-5.6-luna`, deep profile `gpt-6.1-sol`. No LLM API key; one shared OAuth login. Where this spec says Haiku 5.5 / Opus 5.5 or `ANTHROPIC_API_KEY`, read these.
+> - The deep profile uses `persona/SOUL.deep.md` (no routing rule), not the shared `SOUL.md`.
+> - The client `text` message takes an optional `lang` (`pt` | `en`, default `en`).
 
 ## 1. Goal
 A JARVIS-style voice assistant running on the user's VPS (2 vCPU / 8 GB, domain `openclawchip.tech`), used from a Windows desktop client and a native Kotlin Android app. Brain: Nous Research **Hermes Agent**. STT: **faster-whisper** (local, CPU). TTS: **ElevenLabs**. It answers in the language it is asked in (Portuguese or English). Target: ~1.5 s from end of speech to first audio for normal questions (1 s on short ones); hard questions take longer and are escalated to a stronger model.

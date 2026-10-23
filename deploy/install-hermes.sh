@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 # Install Hermes Agent for Jarvis: user `hermes`, profiles fast (8642) and deep (8643).
 #
-# Run as root from the repo root, after putting ANTHROPIC_API_KEY and API_SERVER_KEY in a
-# root-only file (mode 600; default /root/jarvis-secrets.env, override with SECRETS_FILE):
+# The LLM is OpenAI via ChatGPT/Codex subscription OAuth (provider `openai-codex`):
+# fast = gpt-5.6-luna, deep = gpt-6.1-sol (override with FAST_MODEL / DEEP_MODEL).
+# No LLM API key is needed; after this script, log in once as the hermes user:
+#   sudo -u hermes -H /home/hermes/.local/bin/hermes auth add openai-codex
+# (device-code flow, works over SSH). Both profiles share that login.
+#
+# Run as root from the repo root, after putting API_SERVER_KEY in a root-only file
+# (mode 600; default /root/jarvis-secrets.env, override with SECRETS_FILE):
 #   sudo bash deploy/install-hermes.sh
-# Do NOT pass the keys inline on the command line (they would land in ps, shell history
+# Do NOT pass the key inline on the command line (it would land in ps, shell history
 # and auth.log). Secrets are never taken as arguments and never printed.
 #
 # --- Verified against https://hermes-agent.nousresearch.com/docs (2026-10-23) ---
@@ -19,17 +25,24 @@
 # - SOUL.md is read from $HERMES_HOME/SOUL.md (profile dir for a profile).
 # - By default the API model name is the PROFILE name, so we set
 #   API_SERVER_MODEL_NAME=hermes-agent to match what the gateway sends.
+# - Provider `openai-codex` ("ChatGPT or Codex Subscription"): `hermes auth add openai-codex`
+#   uses a device code by default; credentials go to ~/.hermes/auth.json and OAuth logins
+#   in the root auth.json are shared by every profile. Codex models include gpt-5.6-luna,
+#   gpt-5.6-terra, gpt-5.6-sol and gpt-5.5. VERIFY: gpt-6.1-sol (released 2026-09-29, in Codex) is
+#   not on that docs page yet; check `hermes -p deep model` lists it.
 #
 # --- NOT verified (marked `# VERIFY:` below; check with `hermes --help` / docs) ---
-# - Exact provider/model identifier syntax for Anthropic claude-haiku-5-5 / claude-opus-5-5
-#   (docs example shows `anthropic/claude-opus-4`; we assume `model.default anthropic/<id>`).
-# - That ANTHROPIC_API_KEY in the profile .env is the variable the Anthropic provider reads.
+# - The config keys `model.provider` / `model.default` (docs show a `model:` section with
+#   `provider` and `default`; setting them with `config set` is inferred).
 # - Whether `hermes profile create` is non-interactive and whether memory is shared
 #   between profiles (spec: verify during build).
 # - That the installer works unattended with only `--non-interactive`.
 set -euo pipefail
 
 SECRETS_FILE="${SECRETS_FILE:-/root/jarvis-secrets.env}"
+PROVIDER=openai-codex
+FAST_MODEL="${FAST_MODEL:-gpt-5.6-luna}"
+DEEP_MODEL="${DEEP_MODEL:-gpt-6.1-sol}"
 HERMES_USER=hermes
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOUL_FAST="$REPO_DIR/persona/SOUL.md"       # includes the [[DEEP]] routing rule
@@ -40,8 +53,8 @@ for f in "$SOUL_FAST" "$SOUL_DEEP"; do
   [ -f "$f" ] || { echo "missing $f (run from the repo)" >&2; exit 1; }
 done
 
-# Secrets: environment first, then a root-only env file.
-if [ -z "${ANTHROPIC_API_KEY:-}" ] || [ -z "${API_SERVER_KEY:-}" ]; then
+# Secret: environment first, then a root-only env file.
+if [ -z "${API_SERVER_KEY:-}" ]; then
   if [ -f "$SECRETS_FILE" ]; then
     if [ "$(stat -c '%a' "$SECRETS_FILE")" != "600" ]; then
       echo "$SECRETS_FILE must be mode 600" >&2; exit 1
@@ -50,7 +63,6 @@ if [ -z "${ANTHROPIC_API_KEY:-}" ] || [ -z "${API_SERVER_KEY:-}" ]; then
     set -a; . "$SECRETS_FILE"; set +a
   fi
 fi
-: "${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY in the environment or $SECRETS_FILE}"
 : "${API_SERVER_KEY:?set API_SERVER_KEY in the environment or $SECRETS_FILE}"
 
 # 1. Service user.
@@ -78,14 +90,16 @@ setup_profile() {
     hermes_as hermes profile create "$name"
   fi
 
-  # VERIFY: model identifier format for Anthropic models (docs example: anthropic/claude-opus-4).
-  hermes_as hermes -p "$name" config set model.default "anthropic/$model"
+  # VERIFY: config keys model.provider / model.default (docs: `model:` section with provider, default).
+  hermes_as hermes -p "$name" config set model.provider "$PROVIDER"
+  hermes_as hermes -p "$name" config set model.default "$model"
 
   # Persona: fast gets the routing rule; deep must never answer [[DEEP]].
   install -o "$HERMES_USER" -g "$HERMES_USER" -m 644 "$soul" "$pdir/SOUL.md"
 
-  # Secrets + API server settings go straight into the profile .env (mode 600),
-  # written from variables, never via command-line arguments.
+  # API server settings go straight into the profile .env (mode 600), written from
+  # variables, never via command-line arguments. The LLM login is OAuth (auth.json),
+  # so no provider key is written; a stale ANTHROPIC_API_KEY line is dropped.
   local envf="$pdir/.env" tmp
   tmp="$(mktemp)"
   chmod 600 "$tmp"
@@ -96,21 +110,21 @@ setup_profile() {
     echo "API_SERVER_PORT=$port"
     echo "API_SERVER_MODEL_NAME=hermes-agent"
     echo "API_SERVER_KEY=$API_SERVER_KEY"
-    # VERIFY: ANTHROPIC_API_KEY is the variable the Anthropic provider reads.
-    echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY"
   } >>"$tmp"
   install -o "$HERMES_USER" -g "$HERMES_USER" -m 600 "$tmp" "$envf"
   rm -f "$tmp"
 }
 
-setup_profile fast claude-haiku-5-5 8642 "$SOUL_FAST"
-setup_profile deep claude-opus-5-5 8643 "$SOUL_DEEP"
+setup_profile fast "$FAST_MODEL" 8642 "$SOUL_FAST"
+setup_profile deep "$DEEP_MODEL" 8643 "$SOUL_DEEP"
 
-# 4. systemd units.
+# 4. systemd units. Started only once the shared Codex OAuth login exists.
 install -m 644 "$REPO_DIR/deploy/hermes-fast.service" /etc/systemd/system/hermes-fast.service
 install -m 644 "$REPO_DIR/deploy/hermes-deep.service" /etc/systemd/system/hermes-deep.service
 systemctl daemon-reload
-systemctl enable --now hermes-fast.service hermes-deep.service
+systemctl enable hermes-fast.service hermes-deep.service
+LOGGED_IN=no
+grep -q '"openai-codex"' "$HH/.hermes/auth.json" 2>/dev/null && LOGGED_IN=yes
 
 # 5. Firewall: only 22, 80, 443 (Hermes binds 127.0.0.1 anyway).
 if command -v ufw >/dev/null 2>&1; then
@@ -120,4 +134,11 @@ if command -v ufw >/dev/null 2>&1; then
   ufw --force enable >/dev/null
 fi
 
-echo "Done. Check: curl -s http://127.0.0.1:8642/health ; curl -s http://127.0.0.1:8643/health"
+if [ "$LOGGED_IN" = yes ]; then
+  systemctl restart hermes-fast.service hermes-deep.service
+  echo "Done. Check: curl -s http://127.0.0.1:8642/health ; curl -s http://127.0.0.1:8643/health"
+else
+  echo "Installed. Next, log in to OpenAI Codex (device code), then start the services:"
+  echo "  sudo -u $HERMES_USER -H $HERMES_BIN auth add openai-codex"
+  echo "  systemctl restart hermes-fast.service hermes-deep.service"
+fi

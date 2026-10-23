@@ -1,5 +1,5 @@
 [Unit]
-Description=Hermes Agent (fast profile, claude-haiku-5-5, 127.0.0.1:8642)
+Description=Hermes Agent (fast profile, openai-codex gpt-5.6-luna, 127.0.0.1:8642)
 After=network-online.target
 Wants=network-online.target
 
