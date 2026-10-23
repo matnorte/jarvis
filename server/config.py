@@ -19,13 +19,14 @@ def _parse_device_tokens(raw: str) -> dict[str, str]:
 
 @dataclass(frozen=True)
 class Settings:
-    elevenlabs_api_key: str
+    # Secrets stay out of repr() so a logged Settings never leaks them.
+    elevenlabs_api_key: str = field(repr=False)
     elevenlabs_voice_id: str
-    hermes_api_key: str
+    hermes_api_key: str = field(repr=False)
     hermes_fast_url: str = "http://127.0.0.1:8642"
     hermes_deep_url: str = "http://127.0.0.1:8643"
     stt_model: str = "base"
-    device_tokens: dict[str, str] = field(default_factory=dict)
+    device_tokens: dict[str, str] = field(default_factory=dict, repr=False)
     canned_dir: Path = Path("cache/canned")
 
     @classmethod

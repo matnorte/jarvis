@@ -19,6 +19,8 @@ log = logging.getLogger(__name__)
 
 CLOSE_UNAUTHORIZED = 4401
 CLOSE_REPLACED = 4409
+AUTH_TIMEOUT_S = 5.0  # the hello must arrive this soon after connecting
+MAX_HELLO_CHARS = 1024  # a longer pre-auth text frame is rejected unparsed
 
 
 @dataclass
@@ -63,7 +65,14 @@ def _build_real_deps(settings: Settings, http: httpx.AsyncClient) -> Deps:
     )
 
 
-def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
+def create_app(
+    settings: Settings,
+    deps: Deps | None = None,
+    auth_timeout: float = AUTH_TIMEOUT_S,
+) -> FastAPI:
+    # websockets logs every frame at DEBUG, including the ElevenLabs
+    # xi_api_key; never let a DEBUG root config print those.
+    logging.getLogger("websockets").setLevel(logging.INFO)
     http: httpx.AsyncClient | None = None
     real = deps is None
     if deps is None:
@@ -149,13 +158,17 @@ def create_app(settings: Settings, deps: Deps | None = None) -> FastAPI:
     async def _authenticate(ws: WebSocket) -> str | None:
         device = None
         try:
-            msg = await ws.receive()
+            msg = await asyncio.wait_for(ws.receive(), auth_timeout)
             text = msg.get("text")
-            if msg["type"] == "websocket.receive" and text is not None:
+            if (
+                msg["type"] == "websocket.receive"
+                and text is not None
+                and len(text) <= MAX_HELLO_CHARS
+            ):
                 parsed = protocol.parse_client(text)
                 if isinstance(parsed, protocol.Hello):
                     device = _device_for(settings.device_tokens, parsed.token)
-        except protocol.ProtocolError:
+        except (protocol.ProtocolError, TimeoutError):
             pass
         except WebSocketDisconnect:
             return None

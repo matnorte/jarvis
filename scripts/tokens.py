@@ -3,9 +3,16 @@
 Usage:
     python -m scripts.tokens add <device> [--env deploy/.env]
     python -m scripts.tokens revoke <device> [--env deploy/.env]
+
+The file is written with mode 600. The gateway reads it only when its container
+is created, so apply any change (add or revoke) with
+    docker compose -f deploy/docker-compose.yml up -d
+`docker compose restart` does NOT reload env_file, so a revoked token would
+keep working until the container is recreated.
 """
 
 import argparse
+import os
 import re
 import secrets
 import sys
@@ -34,7 +41,14 @@ def _read(env: Path) -> tuple[list[str], dict[str, str]]:
 def _write(env: Path, others: list[str], devices: dict[str, str]) -> None:
     value = ",".join(f"{d}:{t}" for d, t in devices.items())
     lines = [*others, f"{KEY}={value}"]
-    env.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    data = ("\n".join(lines) + "\n").encode("utf-8")
+    # Create owner-only; the mode applies only on creation, so also tighten an
+    # existing file. On Windows chmod only toggles read-only (best effort).
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_BINARY", 0)
+    fd = os.open(env, flags, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
+    os.chmod(env, 0o600)
 
 
 def add(env: Path, device: str) -> str:
@@ -57,7 +71,11 @@ def revoke(env: Path, device: str) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Manage device tokens in .env")
+    parser = argparse.ArgumentParser(
+        description="Manage device tokens in .env",
+        epilog="Then run `docker compose -f deploy/docker-compose.yml up -d` "
+        "(not restart) so the gateway reloads the env file.",
+    )
     parser.add_argument("action", choices=["add", "revoke"])
     parser.add_argument("device")
     parser.add_argument("--env", type=Path, default=Path("deploy/.env"))

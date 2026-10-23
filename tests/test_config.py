@@ -13,3 +13,12 @@ def test_settings_parses_device_tokens():
 def test_settings_missing_key_raises():
     with pytest.raises(KeyError):
         Settings.from_env({})
+
+
+def test_settings_repr_hides_secrets():
+    s = Settings.from_env({"ELEVENLABS_API_KEY": "el-secret", "ELEVENLABS_VOICE_ID": "v",
+                           "API_SERVER_KEY": "hermes-secret", "DEVICE_TOKENS": "win:tok-secret"})
+    text = repr(s)
+    for secret in ("el-secret", "hermes-secret", "tok-secret"):
+        assert secret not in text
+    assert "elevenlabs_voice_id='v'" in text

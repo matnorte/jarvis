@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 MIC_RATE = 16000
 OUT_RATE = 24000
 LEVEL_EVERY_MS = 66.0
+MAX_UTTERANCE_BYTES = 30 * MIC_RATE * 2  # 30 s of PCM16 mono
 
 _MESSAGES = {
     "stt_failed": "Speech recognition failed.",
@@ -162,13 +163,14 @@ class Session:
         if not self._listening:
             self._listening = True
             await self._send_text(protocol.state("listening"))
-        self._buf += pcm16
+        room = MAX_UTTERANCE_BYTES - len(self._buf)
+        self._buf += pcm16[:room]
         self._mic_ms += len(pcm16) // 2 * 1000.0 / MIC_RATE
         if self._mic_ms >= LEVEL_EVERY_MS:
             self._mic_ms = 0.0
             await self._send_text(protocol.level(_rms_level(pcm16), 0.0))
         result = self._endpointer.feed(pcm16)
-        if result == "end":
+        if result == "end" or len(self._buf) >= MAX_UTTERANCE_BYTES:
             await self.on_end_utterance()
         elif result == "no_speech":
             self._reset_input()

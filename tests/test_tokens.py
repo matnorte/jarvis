@@ -1,3 +1,5 @@
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -54,3 +56,22 @@ def test_revoke_unknown_returns_false(tmp_path):
 def test_rejects_bad_device_name(tmp_path):
     with pytest.raises(ValueError):
         tokens.add(tmp_path / ".env", "bad:name")
+
+
+def test_env_file_is_private(tmp_path):
+    env = tmp_path / ".env"
+    env.write_text("FOO=bar\n", encoding="utf-8")
+    if os.name == "posix":
+        env.chmod(0o644)
+    tokens.add(env, "win")
+    fresh = tmp_path / "fresh.env"
+    tokens.add(fresh, "win")
+    tokens.revoke(env, "win")
+    if os.name == "posix":  # Windows has no POSIX permission bits
+        assert stat.S_IMODE(env.stat().st_mode) == 0o600
+        assert stat.S_IMODE(fresh.stat().st_mode) == 0o600
+    assert "FOO=bar" in env.read_text(encoding="utf-8")
+
+
+def test_usage_says_up_d_reloads_env():
+    assert "docker compose" in tokens.__doc__ and "up -d" in tokens.__doc__

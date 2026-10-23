@@ -375,3 +375,15 @@ async def test_router_aclose_error_still_reaps_speaker():
     mark = len(h.sent)
     await asyncio.sleep(0.05)
     assert len(h.sent) == mark
+
+
+async def test_utterance_capped_at_30_seconds():
+    h = Harness()
+    second = frame(5000, ms=1000)  # continuous speech: the endpointer never fires
+    for _ in range(29):
+        await h.session.on_audio(second)
+    assert h.stt.calls == []
+    await h.session.on_audio(frame(5000, ms=1500))  # crosses 30 s
+    await h.session.join()
+    assert [len(c) for c in h.stt.calls] == [960000]
+    assert h.states() == ["listening", "thinking", "speaking", "idle"]

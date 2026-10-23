@@ -48,7 +48,7 @@ class FakeCanned:
         return b"C" * 4
 
 
-def make(tokens=None):
+def make(tokens=None, **kw):
     settings = Settings(
         elevenlabs_api_key="k",
         elevenlabs_voice_id="v",
@@ -56,7 +56,7 @@ def make(tokens=None):
         device_tokens=tokens or {TOKEN: "phone", "tok-desk": "desk"},
     )
     deps = Deps(stt=FakeSTT(), router=FakeRouter(), tts=FakeTTS(), canned=FakeCanned())
-    return TestClient(create_app(settings, deps)), deps
+    return TestClient(create_app(settings, deps, **kw)), deps
 
 
 def hello(token=TOKEN, device="whatever"):
@@ -108,6 +108,43 @@ def test_bad_json_before_hello_closes_4401():
     with client.websocket_connect("/ws") as ws:
         ws.send_text("not json")
         assert closed_code(ws) == 4401
+
+
+def test_idle_socket_before_hello_closes_4401():
+    client, deps = make(auth_timeout=0.2)
+    with client.websocket_connect("/ws") as ws:
+        assert closed_code(ws) == 4401  # nothing sent: closed after the timeout
+    assert deps.stt.calls == [] and deps.router.calls == []
+
+
+def test_oversized_hello_closes_4401():
+    client, deps = make()
+    big = json.dumps({"type": "hello", "token": TOKEN, "device": "x" * 1100})
+    assert len(big) > 1024
+    with client.websocket_connect("/ws") as ws:
+        ws.send_text(big)
+        assert closed_code(ws) == 4401
+    assert deps.router.calls == []
+
+
+def test_hello_at_size_limit_is_accepted():
+    client, _ = make()
+    msg = hello(device="x")
+    msg = hello(device="x" * (1024 - len(msg) + 1))
+    assert len(msg) == 1024
+    with client.websocket_connect("/ws") as ws:
+        ws.send_text(msg)
+        ws.send_text(json.dumps({"type": "text", "text": "hi"}))
+        assert json.loads(ws.receive_text())["type"] == "state"
+
+
+def test_websockets_logger_pinned_to_info():
+    import logging
+
+    logging.getLogger("websockets").setLevel(logging.DEBUG)
+    make()
+    assert logging.getLogger("websockets").level == logging.INFO
+    assert not logging.getLogger("websockets.client").isEnabledFor(logging.DEBUG)
 
 
 def test_text_turn_roundtrip_uses_token_device():
