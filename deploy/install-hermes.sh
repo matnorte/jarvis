@@ -121,6 +121,14 @@ write_api_env() {
 setup_profile fast "$FAST_MODEL" "$SOUL_FAST"
 setup_profile deep "$DEEP_MODEL" "$SOUL_DEEP"
 
+# Latency: the fast profile answers by voice, so it keeps only web, memory, skills and
+# session search on the API. Heavy toolsets (each tool call costs seconds) stay on the
+# deep profile, which hard requests escalate to. Measured: "15 times 3" went from 5-7 s
+# to ~1-1.5 s to first words once these were off.
+hermes_as hermes -p fast tools disable --platform api_server \
+  browser terminal file code_execution vision image_gen tts todo cronjob \
+  computer_use delegation connections
+
 # 4. One host gateway: the default profile owns the API listener on 127.0.0.1:8642 and
 #    multiplexes every profile under /p/<profile>/.
 write_api_env "$HH/.hermes/.env" \

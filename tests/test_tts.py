@@ -167,6 +167,27 @@ async def test_silent_server_times_out():
             await collect(tts.synthesize(chunks("hi"), "en"))
 
 
+async def test_preconnected_stream_waits_for_text_without_timing_out():
+    async def handler(ws):
+        async for raw in ws:
+            if json.loads(raw).get("text") == "":
+                break
+        await ws.send(json.dumps({"audio": base64.b64encode(b"ok").decode()}))
+        await ws.send(json.dumps({"isFinal": True}))
+
+    async def slow_chunks():
+        await asyncio.sleep(0.5)  # the LLM is still thinking, longer than recv_timeout
+        yield "Hello. "
+
+    async with serve(handler) as server:
+        tts = ElevenLabsTTS("k", "v", base_url=base_url(server), recv_timeout=0.2)
+        assert b"".join(await collect(tts.synthesize(slow_chunks(), "en"))) == b"ok"
+
+
+def test_url_raises_inactivity_timeout_for_preconnect():
+    assert "inactivity_timeout=90" in ElevenLabsTTS("k", "v")._url("en")
+
+
 async def test_cancellation_propagates_and_closes_socket():
     closed = asyncio.Event()
     started = asyncio.Event()

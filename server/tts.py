@@ -28,6 +28,7 @@ log = logging.getLogger(__name__)
 # Turbo v2.5: more natural prosody than Flash, still on the stream-input WebSocket.
 MODEL_ID = "eleven_turbo_v2_5"
 OUTPUT_FORMAT = "pcm_24000"
+INACTIVITY_TIMEOUT_S = 90
 # Lower stability and some style give a livelier, less monotone delivery.
 VOICE_SETTINGS = {
     "stability": 0.35,
@@ -85,11 +86,17 @@ class ElevenLabsTTS:
                 "output_format": OUTPUT_FORMAT,
                 "language_code": lang,
                 "auto_mode": "true",
+                # The socket is opened before the reply text exists (pre-connect),
+                # so allow longer than Hermes' 60 s deadline before ElevenLabs
+                # drops it for inactivity (default 20 s, max 180 s).
+                "inactivity_timeout": INACTIVITY_TIMEOUT_S,
             }
         )
         return f"{self._base_url}/v1/text-to-speech/{self._voice_id}/stream-input?{query}"
 
-    async def _send_all(self, ws, chunks: AsyncIterator[str]) -> None:
+    async def _send_all(
+        self, ws, chunks: AsyncIterator[str], text_sent: asyncio.Event
+    ) -> None:
         await ws.send(
             json.dumps(
                 {
@@ -103,7 +110,9 @@ class ElevenLabsTTS:
             if chunk:
                 text = chunk if chunk.endswith(" ") else chunk + " "
                 await ws.send(json.dumps({"text": text}))
+                text_sent.set()
         await ws.send(json.dumps({"text": ""}))
+        text_sent.set()
 
     async def synthesize(
         self, chunks: AsyncIterator[str], lang: str
@@ -114,7 +123,8 @@ class ElevenLabsTTS:
             raise TTSError(
                 f"ElevenLabs connection failed: {type(exc).__name__}"
             ) from exc
-        sender = asyncio.create_task(self._send_all(ws, chunks))
+        text_sent = asyncio.Event()
+        sender = asyncio.create_task(self._send_all(ws, chunks, text_sent))
         recv_task: asyncio.Task | None = None
         try:
             while True:
@@ -122,9 +132,11 @@ class ElevenLabsTTS:
                     recv_task = asyncio.create_task(ws.recv())
                 sender_was_done = sender.done()
                 waiting = {recv_task} if sender.done() else {recv_task, sender}
+                # The receive timeout only runs once text has gone out: a
+                # pre-connected socket may wait for the reply as long as needed.
                 await asyncio.wait(
                     waiting,
-                    timeout=self._recv_timeout,
+                    timeout=self._recv_timeout if text_sent.is_set() else None,
                     return_when=asyncio.FIRST_COMPLETED,
                 )
                 if (

@@ -54,8 +54,11 @@ def _unclosed(prefix: str) -> bool:
     return prefix.count("[") > prefix.count("]")
 
 
-# Whole sentences keep ElevenLabs' intonation natural; a clause break is only a
-# safety valve for very long sentences so the first audio is not held up.
+# Whole sentences keep ElevenLabs' intonation natural. Clause breaks are a
+# latency valve: the first chunk may end at a clause once it has 40 characters
+# (so the first audio is not held up by a long opening sentence); later chunks
+# only once they reach 100 characters.
+_FIRST_CLAUSE_CHARS = 40
 _LONG_CLAUSE_CHARS = 100
 _CLAUSE_BREAK = re.compile(r"[,;:](?=\s)")
 _SENTENCE_BREAK = re.compile(r"[.!?](?=\s)")
@@ -65,13 +68,14 @@ class ClauseChunker:
     """Splits streamed text into speakable chunks.
 
     Chunks end at sentence ends (. ! ?), or at , ; : once a chunk holds at least
-    100 characters. A boundary needs whitespace after the punctuation, so
-    trailing punctuation waits for more text (e.g. "3.5", "U.S."). flush() emits
-    whatever remains.
+    40 characters (first chunk) or 100 characters (later chunks). A boundary
+    needs whitespace after the punctuation, so trailing punctuation waits for
+    more text (e.g. "3.5", "U.S."). flush() emits whatever remains.
     """
 
     def __init__(self) -> None:
         self._buf = ""
+        self._first_done = False
 
     def _emit(self, raw: str, out: list[str]) -> None:
         # Delimiters left over (flush with an unclosed one) must never be spoken.
@@ -88,14 +92,16 @@ class ClauseChunker:
                 break
             self._emit(self._buf[:end], out)
             self._buf = self._buf[end:]
+            self._first_done = True
         return out
 
     def _find_boundary(self) -> int | None:
+        clause_min = _LONG_CLAUSE_CHARS if self._first_done else _FIRST_CLAUSE_CHARS
         candidates = [m.end() for m in _SENTENCE_BREAK.finditer(self._buf)]
         candidates += [
             m.end()
             for m in _CLAUSE_BREAK.finditer(self._buf)
-            if len(self._buf[: m.end()].strip()) >= _LONG_CLAUSE_CHARS
+            if len(self._buf[: m.end()].strip()) >= clause_min
         ]
         for end in sorted(candidates):
             if not _unclosed(self._buf[:end]):

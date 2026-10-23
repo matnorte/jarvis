@@ -449,3 +449,35 @@ async def test_deep_state_sent_even_without_ack_audio():
     await h.session.on_text("hard question")
     await h.session.join()
     assert audio_and_states(h) == ["thinking", "deep", "speaking", AUDIO, "idle"]
+
+
+async def test_tts_is_preconnected_before_first_reply_text():
+    h = Harness(router=FakeRouter([0.2, Delta("Right away, sir. ")]))
+    await h.session.on_text("do the thing")
+    await asyncio.sleep(0.1)  # the router is still "thinking"
+    assert h.tts.started == 1
+    await h.session.join()
+    assert h.tts.started == 1 and h.tts.chunks == ["Right away, sir."]
+
+
+async def test_unused_preconnected_stream_is_closed_on_escalation():
+    h = Harness(router=FakeRouter([0.1, Escalated(), Delta("Deep reply here. ")]))
+    await h.session.on_text("hard question")
+    await h.session.join()
+    assert h.tts.started == 2 and h.tts.closed == 2  # fast (unused) + deep
+    assert h.tts.chunks == ["Deep reply here."]
+    assert not any(m.get("type") == "error" for m in h.sent if isinstance(m, dict))
+
+
+def test_filler_defaults_to_three_seconds():
+    assert Harness().session._filler_after == 3.0
+
+
+async def test_turn_timings_are_logged_without_content(caplog):
+    caplog.set_level("INFO", logger="server.session")
+    h = Harness(router=FakeRouter([Delta("Secret answer text. ")]))
+    await h.session.on_text("my private question")
+    await h.session.join()
+    line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("turn ok"))
+    assert "first_text=" in line and "first_reply_audio=" in line
+    assert "private" not in line and "Secret" not in line
