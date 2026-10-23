@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import json
 import logging
@@ -122,3 +123,51 @@ async def test_canned_ensure_survives_tts_failure(tmp_path, caplog):
     assert canned.get("one_moment", "pt") == b""
     assert list(tmp_path.glob("*.pcm")) == []
     assert "warning" in caplog.text.lower() or caplog.records
+
+
+async def test_chunks_failure_raises_promptly():
+    async def bad_chunks():
+        yield "one"
+        raise RuntimeError("hermes died")
+
+    async def handler(ws):
+        await ws.wait_closed()  # never sends isFinal
+
+    async with serve(handler) as server:
+        tts = ElevenLabsTTS("k", "v", base_url=base_url(server), recv_timeout=5.0)
+        loop = asyncio.get_running_loop()
+        start = loop.time()
+        with pytest.raises(TTSError) as ei:
+            await collect(tts.synthesize(bad_chunks(), "en"))
+        assert loop.time() - start < 2.0
+    assert isinstance(ei.value.__cause__, RuntimeError)
+
+
+async def test_silent_server_times_out():
+    async def handler(ws):
+        await ws.wait_closed()
+
+    async with serve(handler) as server:
+        tts = ElevenLabsTTS("k", "v", base_url=base_url(server), recv_timeout=0.2)
+        with pytest.raises(TTSError, match="timed out"):
+            await collect(tts.synthesize(chunks("hi"), "en"))
+
+
+async def test_cancellation_propagates_and_closes_socket():
+    closed = asyncio.Event()
+    started = asyncio.Event()
+
+    async def handler(ws):
+        await ws.recv()
+        started.set()
+        await ws.wait_closed()
+        closed.set()
+
+    async with serve(handler) as server:
+        tts = ElevenLabsTTS("k", "v", base_url=base_url(server), recv_timeout=5.0)
+        task = asyncio.create_task(collect(tts.synthesize(chunks("hi"), "en")))
+        await asyncio.wait_for(started.wait(), 2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        await asyncio.wait_for(closed.wait(), 2)

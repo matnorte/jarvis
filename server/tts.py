@@ -41,7 +41,9 @@ class ElevenLabsTTS:
         api_key: str,
         voice_id: str,
         base_url: str = "wss://api.elevenlabs.io",
+        recv_timeout: float = 10.0,
     ) -> None:
+        self._recv_timeout = recv_timeout
         self._api_key = api_key
         self._voice_id = voice_id
         self._base_url = base_url.rstrip("/")
@@ -75,10 +77,31 @@ class ElevenLabsTTS:
                 f"ElevenLabs connection failed: {type(exc).__name__}"
             ) from exc
         sender = asyncio.create_task(self._send_all(ws, chunks))
+        recv_task: asyncio.Task | None = None
         try:
             while True:
+                if recv_task is None:
+                    recv_task = asyncio.create_task(ws.recv())
+                sender_was_done = sender.done()
+                waiting = {recv_task} if sender.done() else {recv_task, sender}
+                await asyncio.wait(
+                    waiting,
+                    timeout=self._recv_timeout,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if (
+                    sender.done()
+                    and not sender.cancelled()
+                    and sender.exception() is not None
+                ):
+                    raise TTSError("ElevenLabs send failed") from sender.exception()
+                if not recv_task.done():
+                    if sender_was_done or not sender.done():
+                        raise TTSError("ElevenLabs receive timed out")
+                    continue  # sender just finished cleanly; keep waiting on recv
                 try:
-                    raw = await ws.recv()
+                    raw = recv_task.result()
+                    recv_task = None
                 except websockets.ConnectionClosed as exc:
                     raise TTSError("ElevenLabs closed before isFinal") from exc
                 try:
@@ -96,11 +119,12 @@ class ElevenLabsTTS:
                 if msg.get("isFinal"):
                     return
         finally:
-            sender.cancel()
-            try:
-                await sender
-            except BaseException:  # noqa: BLE001 - cancelled or already surfaced
-                pass
+            pending = [t for t in (recv_task, sender) if t is not None]
+            for t in pending:
+                t.cancel()
+            # return_exceptions retrieves the tasks' own errors/cancellation;
+            # an outer cancellation of this coroutine still propagates.
+            await asyncio.gather(*pending, return_exceptions=True)
             await ws.close()
 
 
