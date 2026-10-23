@@ -49,7 +49,9 @@ class ConversationTest {
     private fun toSpeaking() {
         toThinking(); conv.onServer(ServerMsg.State("thinking")); conv.onServerAudio(ByteArray(960)); reset()
     }
-    private fun toFollowUp() { toSpeaking(); conv.onServer(ServerMsg.SpeakingDone); reset() }
+    private fun toFollowUp() {
+        toSpeaking(); conv.onServer(ServerMsg.SpeakingDone); conv.onPlaybackDone(); reset()
+    }
 
     @Test fun wakeSendsPreRollThenLiveFrames() {
         start()
@@ -117,6 +119,8 @@ class ConversationTest {
         assertEquals("speaking", conv.state.value.orbState)
         assertEquals(1f, conv.state.value.outLevel, 0.001f)
         conv.onServer(ServerMsg.SpeakingDone)
+        assertEquals(Phase.SPEAKING, phase) // AudioTrack still draining
+        conv.onPlaybackDone()
         assertEquals(Phase.FOLLOW_UP, phase)
         assertEquals("listening", conv.state.value.orbState)
         assertEquals(0f, conv.state.value.outLevel, 0f)
@@ -230,8 +234,97 @@ class ConversationTest {
         conv.onServer(ServerMsg.State("error"))
         conv.onServerAudio(ByteArray(960))
         conv.onServer(ServerMsg.State("idle"))
+        assertEquals(Phase.SPEAKING, phase) // spoken error line still draining
+        conv.onPlaybackDone()
         assertEquals(Phase.FOLLOW_UP, phase)
         assertEquals(listOf("play"), calls)
+    }
+
+    @Test fun errorWithoutAudioIdleGoesFollowUpImmediately() {
+        start(); toThinking()
+        conv.onServer(ServerMsg.State("thinking"))
+        conv.onServer(ServerMsg.Error("llm_failed", "Brain unavailable"))
+        conv.onServer(ServerMsg.State("idle"))
+        assertEquals(Phase.FOLLOW_UP, phase)
+    }
+
+    @Test fun speakingDoneThenPlaybackDoneStartsFollowUp() {
+        start(); toSpeaking()
+        conv.onServer(ServerMsg.SpeakingDone)
+        assertEquals(Phase.SPEAKING, phase)
+        assertEquals("speaking", conv.state.value.orbState)
+        conv.onPlaybackDone()
+        assertEquals(Phase.FOLLOW_UP, phase)
+        assertEquals(emptyList<String>(), calls)
+    }
+
+    @Test fun playbackDoneThenSpeakingDone() {
+        start(); toSpeaking()
+        conv.onPlaybackDone() // queue ran dry between chunks
+        assertEquals(Phase.SPEAKING, phase)
+        conv.onServerAudio(ByteArray(960)) // more reply arrives: playback pending again
+        conv.onPlaybackDone()
+        assertEquals(Phase.SPEAKING, phase)
+        conv.onServer(ServerMsg.SpeakingDone)
+        assertEquals(Phase.FOLLOW_UP, phase)
+    }
+
+    @Test fun followUpTimerStartsAtDrainNotAtSpeakingDone() {
+        start(); toSpeaking()
+        conv.onServer(ServerMsg.SpeakingDone)
+        frames(150) // 4.8 s of reply still playing
+        assertEquals(Phase.SPEAKING, phase)
+        conv.onPlaybackDone()
+        frames(187)
+        assertEquals(Phase.FOLLOW_UP, phase)
+        frames(1)
+        assertEquals(Phase.WAITING, phase)
+        assertEquals(emptyList<String>(), calls)
+    }
+
+    @Test fun speechDuringDrainDoesNotStartFollowUpTurn() {
+        start(); toSpeaking()
+        conv.onServer(ServerMsg.SpeakingDone)
+        frames(20, speech = true) // speaker echo: not a new utterance
+        assertEquals(Phase.SPEAKING, phase)
+        assertEquals(emptyList<String>(), calls)
+        frames(1, wake = true) // barge-in still works during the drain
+        assertEquals(listOf("text:interrupt", "flush"), calls.take(2))
+        assertEquals(Phase.LISTENING, phase)
+    }
+
+    @Test fun noAudioTurnSpeakingDoneGoesFollowUpImmediately() {
+        start(); toThinking()
+        conv.onServer(ServerMsg.State("thinking"))
+        conv.onServer(ServerMsg.SpeakingDone)
+        assertEquals(Phase.FOLLOW_UP, phase)
+    }
+
+    @Test fun playbackDoneIgnoredOutsideSpeaking() {
+        start()
+        conv.onPlaybackDone()
+        assertEquals(Phase.WAITING, phase)
+        toListening()
+        conv.onPlaybackDone()
+        assertEquals(Phase.LISTENING, phase)
+        frames(5, speech = true); frames(22)
+        conv.onPlaybackDone()
+        assertEquals(Phase.THINKING, phase)
+        reset()
+        conv.onServer(ServerMsg.SpeakingDone)
+        assertEquals(Phase.FOLLOW_UP, phase) // no audio this turn, so no drain needed
+        conv.onPlaybackDone()
+        assertEquals(Phase.FOLLOW_UP, phase)
+        assertEquals(emptyList<String>(), calls)
+    }
+
+    @Test fun speakingDoneInThinkingAfterAudioWaitsForDrain() {
+        start(); toSpeaking()
+        conv.onServer(ServerMsg.State("deep")) // ack line sent, display back to THINKING
+        conv.onServer(ServerMsg.SpeakingDone)
+        assertEquals(Phase.SPEAKING, phase) // the ack line is still audible
+        conv.onPlaybackDone()
+        assertEquals(Phase.FOLLOW_UP, phase)
     }
 
     @Test fun transcriptReplacedAndReplyAccumulatesAndClearsOnNewTurn() {
@@ -245,7 +338,7 @@ class ConversationTest {
         assertEquals("It is noon.", conv.state.value.reply)
         conv.onServer(ServerMsg.SpeakingDone)
         frames(1, speech = true)
-        assertEquals(Phase.LISTENING, phase)
+        assertEquals(Phase.LISTENING, phase) // no reply audio in this turn: FOLLOW_UP was immediate
         assertEquals("", conv.state.value.reply)
         assertEquals("what time is it", conv.state.value.transcript)
     }

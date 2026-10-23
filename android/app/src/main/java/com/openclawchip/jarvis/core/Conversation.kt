@@ -46,6 +46,8 @@ class Conversation(private val fx: Effects, private val config: Config, private 
     private var deep = false
     private var gotAudio = false     // reply audio played in this turn
     private var errorPending = false // server error: the next state:idle ends the turn in FOLLOW_UP
+    private var serverDone = false   // speaking_done (or idle after error) received for this turn
+    private var playbackPending = false // reply audio queued but not yet played out
     private var phaseStart = 0L      // entry time of LISTENING / FOLLOW_UP
     private var speechSeen = false
     private var lastSpeechAt = 0L
@@ -104,7 +106,7 @@ class Conversation(private val fx: Effects, private val config: Config, private 
             is ServerMsg.Transcript -> if (msg.final) transcript = msg.text
             is ServerMsg.ReplyText -> reply += msg.delta
             is ServerMsg.Error -> { notice = msg.message; errorPending = true }
-            ServerMsg.SpeakingDone -> if (inTurn()) enterFollowUp()
+            ServerMsg.SpeakingDone -> if (inTurn()) serverFinished()
             else -> {}
         }
         publish()
@@ -117,8 +119,17 @@ class Conversation(private val fx: Effects, private val config: Config, private 
         if (phase != Phase.SPEAKING) speechRun = 0
         phase = Phase.SPEAKING
         gotAudio = true
+        playbackPending = true
         deep = false
         outLevel = chunkLevel(pcm)
+        publish()
+    }
+
+    /** AudioTrack's queue has fully played out. Only a turn in progress cares; elsewhere a no-op. */
+    fun onPlaybackDone() {
+        if (!inTurn()) return
+        playbackPending = false
+        if (phase == Phase.SPEAKING && serverDone) enterFollowUp()
         publish()
     }
 
@@ -209,6 +220,8 @@ class Conversation(private val fx: Effects, private val config: Config, private 
         deep = false
         gotAudio = false
         errorPending = false
+        serverDone = false
+        playbackPending = false
         speechRun = 0
     }
 
@@ -241,10 +254,17 @@ class Conversation(private val fx: Effects, private val config: Config, private 
                 }
             }
             "idle" -> when {
-                errorPending && inTurn() -> enterFollowUp()
+                errorPending && inTurn() -> serverFinished()
                 phase == Phase.THINKING && !gotAudio -> phase = Phase.WAITING
             }
         }
+    }
+
+    /** The server sent its last audio; FOLLOW_UP waits until the phone has also played it out. */
+    private fun serverFinished() {
+        serverDone = true
+        if (playbackPending) phase = Phase.SPEAKING // still audible (e.g. after a "deep" ack line)
+        else enterFollowUp() // nothing queued (no audio this turn, or already drained)
     }
 
     private fun enterFollowUp() {
@@ -261,6 +281,8 @@ class Conversation(private val fx: Effects, private val config: Config, private 
         pendingWake = false
         dropAudio = false // a new connection is a new server session
         errorPending = false
+        serverDone = false
+        playbackPending = false
         deep = false
         outLevel = 0f
         if (newNotice != null) notice = newNotice
