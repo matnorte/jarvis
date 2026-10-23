@@ -1,0 +1,30 @@
+services:
+  gateway:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    # Host networking so the gateway reaches Hermes on 127.0.0.1:8642/8643.
+    # The image CMD binds uvicorn to 127.0.0.1:8000 only.
+    network_mode: host
+    env_file: .env
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+      - gateway_cache:/app/cache
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    network_mode: host # listens on 80/443
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - gateway
+    restart: unless-stopped
+
+volumes:
+  hf_cache:
+  gateway_cache:
+  caddy_data:
+  caddy_config:
