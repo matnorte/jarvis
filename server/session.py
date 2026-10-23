@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 
 import numpy as np
@@ -76,20 +77,32 @@ def _raise_if_cancelling() -> None:
 
 
 class _Speaker:
-    """Feeds clause chunks to one lazily started TTS stream."""
+    """Feeds clause chunks to one TTS stream.
+
+    start() opens the stream early (pre-connect) so the connection is ready by
+    the time the first sentence exists; without it the stream starts lazily on
+    the first chunk. A stream that never received text is cancelled, not
+    finished, so an escalated or empty answer costs no ElevenLabs request.
+    """
 
     def __init__(self, session: Session, lang: str) -> None:
         self._session = session
         self._lang = lang
         self._chunker = ClauseChunker()
         self._queue: asyncio.Queue[str | None] = asyncio.Queue()
+        self._sent = False
         self.task: asyncio.Task | None = None
+
+    def start(self) -> None:
+        if self.task is None:
+            self.task = asyncio.create_task(self._run())
 
     def _put(self, chunk: str) -> None:
         if self.task is None:
-            self.task = asyncio.create_task(self._run())
+            self.start()
         elif self.task.done():
             self.task.result()  # surface a TTS failure promptly
+        self._sent = True
         self._queue.put_nowait(chunk)
 
     async def feed(self, delta: str) -> None:
@@ -99,9 +112,13 @@ class _Speaker:
     async def finish(self) -> None:
         for chunk in self._chunker.flush():
             self._put(chunk)
-        if self.task is not None:
-            self._queue.put_nowait(None)
-            await self.task
+        if self.task is None:
+            return
+        if not self._sent:
+            await _reap(self.task)  # pre-connected but never used
+            return
+        self._queue.put_nowait(None)
+        await self.task
 
     async def _chunks(self) -> AsyncIterator[str]:
         while (chunk := await self._queue.get()) is not None:
@@ -112,6 +129,7 @@ class _Speaker:
         synth = self._session._tts.synthesize(chunks, self._lang)
         try:
             async for audio in synth:
+                self._session._mark("first_reply_audio")
                 await self._session._play(audio)
         except Exception as exc:
             raise _StageError("tts_failed") from exc
@@ -132,7 +150,7 @@ class Session:
         router,
         tts,
         canned,
-        filler_after: float = 1.5,
+        filler_after: float = 3.0,
     ) -> None:
         self._device = device
         self._send_text = send_text
@@ -151,6 +169,19 @@ class Session:
         self._speaking = False
         self._mic_ms = 0.0
         self._out_ms = 0.0
+        self._t0 = 0.0
+        self._marks: dict[str, float] = {}
+
+    # ----- timing -----------------------------------------------------
+
+    def _mark(self, name: str) -> None:
+        """Record the first time `name` happens in this turn (ms since start)."""
+        if name not in self._marks:
+            self._marks[name] = (time.perf_counter() - self._t0) * 1000.0
+
+    def _log_timings(self, outcome: str) -> None:
+        parts = " ".join(f"{k}={v:.0f}ms" for k, v in self._marks.items())
+        log.info("turn %s device=%s %s", outcome, self._device, parts)
 
     # ----- public API -------------------------------------------------
 
@@ -230,6 +261,8 @@ class Session:
         # before its first step never leaves an un-awaited coroutine behind.
         self._speaking = False
         self._out_ms = 0.0
+        self._t0 = time.perf_counter()
+        self._marks = {}
         self._turn = asyncio.create_task(self._guard(turn, *args))
 
     async def _guard(self, turn, *args) -> None:
@@ -247,6 +280,7 @@ class Session:
             log.warning("stt failed: %s", type(exc).__name__)
             await self._fail("stt_failed", "en")
             return
+        self._mark("stt")
         await self._send_text(protocol.transcript(tr.text, tr.lang, True))
         await self._respond(tr.text, tr.lang)
 
@@ -265,24 +299,31 @@ class Session:
         except _StageError as exc:
             log.warning("%s: %s", exc.code, type(exc.__cause__).__name__)
             await self._fail(exc.code, lang)
+            self._log_timings(exc.code)
             return
+        # Log before telling the client we're done: it may hang up right away.
+        self._log_timings("ok")
         await self._send_text(protocol.speaking_done())
         await self._send_text(protocol.state("idle"))
 
     async def _answer(self, text: str, lang: str) -> None:
         events = self._router.ask(self._device, text, lang)
         speakers = [_Speaker(self, lang)]
+        speakers[0].start()  # pre-connect TTS while the LLM thinks
         got_reply = asyncio.Event()
         filler = asyncio.create_task(self._filler(lang, got_reply))
         try:
             try:
                 async for ev in events:
                     if isinstance(ev, Escalated):
+                        self._mark("escalated")
                         got_reply.set()
                         await speakers[-1].finish()
                         await self._play_line(self._canned.get("ack_deep", lang), "deep")
                         speakers.append(_Speaker(self, lang))
+                        speakers[-1].start()
                     elif isinstance(ev, Delta) and ev.text:
+                        self._mark("first_text")
                         got_reply.set()
                         await self._send_text(protocol.reply_text(ev.text))
                         await speakers[-1].feed(ev.text)

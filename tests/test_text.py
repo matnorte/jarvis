@@ -104,3 +104,17 @@ def test_link_spanning_boundary_is_clean():
 
 def test_unclosed_delimiter_flushes_without_symbols():
     assert _no_delims(_all_chunks(ClauseChunker(), "**never closed, sir. more"))
+
+
+def test_first_chunk_may_break_at_clause_after_40_chars():
+    c = ClauseChunker()
+    head = "Certainly, sir, I have checked the calendar"
+    assert len(head) >= 40
+    assert c.feed(head + ", and ") == [head + ","]
+    # later chunks need 100 characters before a clause break
+    assert c.feed("you are free all afternoon, sir. ") == ["and you are free all afternoon, sir."]
+
+
+def test_short_first_clause_still_waits_for_sentence():
+    c = ClauseChunker()
+    assert c.feed("Certainly, sir, ") == []
