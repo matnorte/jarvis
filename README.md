@@ -1,7 +1,8 @@
 # Jarvis backend
 
 Voice gateway: WebSocket in (PCM16 16 kHz) -> faster-whisper STT -> Hermes Agent
-(fast Haiku profile, escalating to a deep Opus profile on `[[DEEP]]`) -> ElevenLabs TTS
+(fast gpt-5.6-luna profile, escalating to a deep gpt-5.6-sol profile on `[[DEEP]]`, both via
+OpenAI Codex OAuth) -> ElevenLabs TTS
 -> WebSocket out (PCM16 24 kHz). Persona in `persona/SOUL.md` (fast profile, with the
 routing rule) and `persona/SOUL.deep.md` (deep profile, same persona without it).
 
@@ -12,9 +13,12 @@ routing rule) and `persona/SOUL.deep.md` (deep profile, same persona without it)
 ## Deploy (Ubuntu VPS)
 
 1. DNS: A record `jarvis.openclawchip.tech` -> VPS IP.
-2. Hermes: put `ANTHROPIC_API_KEY` and `API_SERVER_KEY` in `/root/jarvis-secrets.env`
-   (root-only, mode 600), then `sudo bash deploy/install-hermes.sh`. The Anthropic key
-   lives only in that file (and the Hermes profiles); it never goes in `deploy/.env`.
+2. Hermes: put `API_SERVER_KEY` in `/root/jarvis-secrets.env` (root-only, mode 600),
+   then `sudo bash deploy/install-hermes.sh`. Log in to OpenAI Codex once (device code,
+   shared by both profiles):
+   `sudo -u hermes -H /home/hermes/.local/bin/hermes auth add openai-codex`, then
+   `systemctl restart hermes-fast hermes-deep`. Models can be overridden with
+   `FAST_MODEL=... DEEP_MODEL=...` when running the script.
    Read the `# VERIFY:` notes in the script header; they list steps not confirmed
    against the Hermes docs.
 3. Config: `cp deploy/.env.example deploy/.env && chmod 600 deploy/.env`, fill in
