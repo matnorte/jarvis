@@ -2,11 +2,17 @@ import json
 
 import pytest
 
-from server.protocol import Hello, ProtocolError, parse_client, state, transcript
+from server.protocol import EndUtterance, Hello, Interrupt, TextInput, ProtocolError, parse_client, state, transcript
 
 
 def test_parse_hello():
     assert parse_client('{"type":"hello","token":"t","device":"win"}') == Hello("t", "win")
+
+
+def test_parse_other_client_messages():
+    assert parse_client('{"type":"text","text":"hi"}') == TextInput("hi")
+    assert parse_client('{"type":"end_utterance"}') == EndUtterance()
+    assert parse_client('{"type":"interrupt"}') == Interrupt()
 
 
 def test_parse_rejects_unknown_and_garbage():

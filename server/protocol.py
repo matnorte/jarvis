@@ -51,7 +51,7 @@ def parse_client(text: str) -> ClientMsg:
         return EndUtterance()
     if kind == "interrupt":
         return Interrupt()
-    if kind == "text_input":
+    if kind == "text":
         return TextInput(_str_field(data, "text"))
     raise ProtocolError(f"unknown message type: {kind!r}")
 
