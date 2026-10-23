@@ -301,9 +301,10 @@ class Session:
             await self._fail(exc.code, lang)
             self._log_timings(exc.code)
             return
+        # Log before telling the client we're done: it may hang up right away.
+        self._log_timings("ok")
         await self._send_text(protocol.speaking_done())
         await self._send_text(protocol.state("idle"))
-        self._log_timings("ok")
 
     async def _answer(self, text: str, lang: str) -> None:
         events = self._router.ask(self._device, text, lang)
