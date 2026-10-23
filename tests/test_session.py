@@ -4,7 +4,7 @@ import math
 import struct
 
 from server.hermes_client import HermesError
-from server.router import Delta, Escalated
+from server.router import Delta, Escalated, Router
 from server.session import Session
 from server.stt import Transcript
 from server.tts import TTSError
@@ -387,3 +387,19 @@ async def test_utterance_capped_at_30_seconds():
     await h.session.join()
     assert [len(c) for c in h.stt.calls] == [960000]
     assert h.states() == ["listening", "thinking", "speaking", "idle"]
+
+
+async def test_empty_hermes_reply_speaks_error_line():
+    class EmptyHermes:
+        async def stream(self, messages):
+            for c in [" ", "\n"]:
+                yield c
+
+    h = Harness(router=Router(EmptyHermes(), EmptyHermes()))
+    await h.session.on_text("hello there", "pt")
+    await h.session.join()
+    assert [e["code"] for e in h.msgs("error")] == ["llm_failed"]
+    assert h.canned.requests == [("error", "pt")]
+    assert CANNED in h.sent and {"type": "speaking_done"} not in h.sent
+    assert h.sent[-1] == {"type": "state", "state": "idle"}
+    assert other_tasks() == []

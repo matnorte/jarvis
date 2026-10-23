@@ -4,11 +4,17 @@ History is kept per device and shared by both profiles. A request carries at
 most `history_turns` user messages including the current one (so
 `history_turns - 1` prior user/assistant pairs). A turn is recorded only when
 the answering stream completes normally; cancelled or failed turns leave no trace.
+An answering stream (fast or deep) that completes with no non-whitespace text
+raises HermesError, so the session speaks its error line instead of silence.
+The deep profile has no routing rule, but as a backstop a leading [[DEEP]] in
+its stream is stripped before anything is emitted or recorded.
 """
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+
+from server.hermes_client import HermesError
 
 MARKER = "[[DEEP]]"
 MIN_CHARS = 8
@@ -46,6 +52,7 @@ class Router:
 
         fast_stream = self._fast.stream(messages)
         deep_stream = None
+        deep_chunks = None
         try:
             buf = ""
             escalate = False
@@ -76,16 +83,48 @@ class Router:
                 await fast_stream.aclose()
                 yield Escalated()
                 deep_stream = self._deep.stream(messages)
-                async for chunk in deep_stream:
+                deep_chunks = _strip_leading_marker(deep_stream)
+                async for chunk in deep_chunks:
                     answer.append(chunk)
                     yield Delta(chunk)
         finally:
             await fast_stream.aclose()
+            if deep_chunks is not None:
+                await deep_chunks.aclose()
             if deep_stream is not None:
                 await deep_stream.aclose()
 
         # Reached only on normal completion (not cancel, close, or error).
+        if not "".join(answer).strip():
+            raise HermesError("Hermes returned an empty reply")
         hist = self._history.setdefault(device, [])
         hist.append(user)
         hist.append({"role": "assistant", "content": "".join(answer)})
         del hist[: max(len(hist) - self._history_turns * 2, 0)]
+
+
+async def _strip_leading_marker(stream: AsyncIterator[str]) -> AsyncIterator[str]:
+    """Pass chunks through, dropping a [[DEEP]] that leads the stream (after
+    whitespace) together with the whitespace after it, even when split across
+    chunks. Closing `stream` is left to the caller."""
+    buf = ""
+    probing, trimming = True, False
+    async for chunk in stream:
+        if probing:
+            buf += chunk
+            head = buf.lstrip()
+            if head.startswith(MARKER):
+                probing, trimming = False, True
+                chunk = head[len(MARKER):]
+            elif MARKER.startswith(head):  # may still become the marker
+                continue
+            else:
+                probing, chunk = False, buf
+        if trimming:
+            chunk = chunk.lstrip()
+            if not chunk:
+                continue
+            trimming = False
+        yield chunk
+    if probing and buf:  # ended while still a possible marker prefix
+        yield buf

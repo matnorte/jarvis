@@ -2,6 +2,7 @@ import asyncio
 
 import pytest
 
+from server.hermes_client import HermesError
 from server.router import Delta, Escalated, Router
 
 
@@ -131,3 +132,42 @@ async def test_stream_error_propagates_and_turn_not_recorded():
     fast.raises = None
     [_ async for _ in r.ask("d", "q2", "en")]
     assert fast.received == [{"role": "user", "content": "[lang:en] q2"}]
+
+
+async def test_empty_fast_reply_raises_and_records_nothing():
+    for chunks in ([], ["  ", "\n"]):
+        fast, deep = FakeHermes(chunks), FakeHermes([])
+        r = Router(fast, deep)
+        with pytest.raises(HermesError):
+            [_ async for _ in r.ask("d", "q1", "en")]
+        fast.chunks = ["fine"]
+        [_ async for _ in r.ask("d", "q2", "en")]
+        assert fast.received == [{"role": "user", "content": "[lang:en] q2"}]
+
+
+async def test_empty_deep_reply_raises_and_records_nothing():
+    fast, deep = FakeHermes(["[[DEEP]]"]), FakeHermes([" "])
+    r = Router(fast, deep)
+    with pytest.raises(HermesError):
+        [_ async for _ in r.ask("d", "q1", "en")]
+    fast.chunks = ["fine"]
+    [_ async for _ in r.ask("d", "q2", "en")]
+    assert fast.received == [{"role": "user", "content": "[lang:en] q2"}]
+
+
+async def test_deep_stream_leading_marker_is_stripped():
+    for chunks in (["[[DEEP]] The plan."], ["\n [[DE", "EP]]", " The ", "plan."]):
+        fast, deep = FakeHermes(["[[DEEP]]"]), FakeHermes(chunks)
+        r = Router(fast, deep)
+        ev = [e async for e in r.ask("d", "q1", "en")]
+        assert text(ev) == "The plan."
+        fast.chunks = ["ok"]
+        [_ async for _ in r.ask("d", "q2", "en")]
+        assert fast.received[1] == {"role": "assistant", "content": "The plan."}
+
+
+async def test_deep_marker_only_stripped_when_leading():
+    fast = FakeHermes(["[[DEEP]]"])
+    deep = FakeHermes(["[[D", "eep thoughts]] here."])
+    ev = [e async for e in Router(fast, deep).ask("d", "q", "en")]
+    assert text(ev) == "[[Deep thoughts]] here."
