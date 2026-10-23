@@ -20,32 +20,32 @@ def test_clean_keeps_snake_case():
     assert clean_for_speech("set my_var_name now") == "set my_var_name now"
 
 
-def test_first_chunk_breaks_early_at_comma():
+def test_chunks_are_whole_sentences():
     c = ClauseChunker()
     out = c.feed("Certainly sir, the weather ") + c.feed("today is mild. Anything else?")
-    assert out == ["Certainly sir,", "the weather today is mild."]
+    assert out == ["Certainly sir, the weather today is mild."]
     assert c.flush() == ["Anything else?"]
 
 
-def test_short_comma_does_not_break():
+def test_comma_does_not_break_a_normal_sentence():
     c = ClauseChunker()
     assert c.feed("Yes, ") == []
+    assert c.feed("certainly sir, ") == []
+    assert c.feed("one, two, three. ") == ["Yes, certainly sir, one, two, three."]
 
 
-def test_short_comma_skipped_then_later_clause_breaks():
+def test_long_sentence_breaks_at_clause_after_100_chars():
     c = ClauseChunker()
-    assert c.feed("Yes, certainly sir, ") == ["Yes, certainly sir,"]
-
-
-def test_after_first_chunk_only_sentence_ends():
-    c = ClauseChunker()
-    assert c.feed("Certainly sir, one, two, three. ") == ["Certainly sir,", "one, two, three."]
+    head = "I have reviewed the quarterly figures you asked for this morning and compared them with last year carefully"
+    assert len(head) >= 100
+    assert c.feed(head + ", and ") == [head + ","]
+    assert c.feed("they look good. ") == ["and they look good."]
 
 
 def test_punctuation_at_buffer_end_waits():
     c = ClauseChunker()
     assert c.feed("The value is 3.") == []
-    assert c.feed("5 today, sir. Ok") == ["The value is 3.5 today,", "sir."]
+    assert c.feed("5 today, sir. Ok") == ["The value is 3.5 today, sir."]
     assert c.feed(" fine.") == []
     assert c.flush() == ["Ok fine."]
 
@@ -69,8 +69,8 @@ def test_chunk_that_cleans_to_empty_is_dropped():
 
 def test_chunks_are_cleaned():
     c = ClauseChunker()
-    assert c.feed("**Certainly** sir, see https://github.com/x ") == ["Certainly sir,"]
-    assert c.flush() == ["see github.com"]
+    assert c.feed("**Certainly** sir. See https://github.com/x ") == ["Certainly sir."]
+    assert c.flush() == ["See github.com"]
 
 
 def _all_chunks(c, *deltas):

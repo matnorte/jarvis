@@ -53,7 +53,9 @@ def _build_real_deps(settings: Settings, http: httpx.AsyncClient) -> Deps:
     from server.stt import Transcriber
     from server.tts import CannedLines, ElevenLabsTTS
 
-    tts = ElevenLabsTTS(settings.elevenlabs_api_key, settings.elevenlabs_voice_id)
+    tts = ElevenLabsTTS(
+        settings.elevenlabs_api_key, settings.elevenlabs_voice_id, model_id=settings.tts_model
+    )
     return Deps(
         stt=Transcriber(settings.stt_model),
         router=Router(
@@ -61,7 +63,8 @@ def _build_real_deps(settings: Settings, http: httpx.AsyncClient) -> Deps:
             HermesClient(settings.hermes_deep_url, settings.hermes_api_key, http),
         ),
         tts=tts,
-        canned=CannedLines(settings.canned_dir, tts),
+        # Per voice+model subfolder, so changing either regenerates the lines.
+        canned=CannedLines(settings.canned_dir / tts.cache_key, tts),
     )
 
 

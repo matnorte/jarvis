@@ -25,8 +25,16 @@ import websockets
 
 log = logging.getLogger(__name__)
 
-MODEL_ID = "eleven_flash_v2_5"
+# Turbo v2.5: more natural prosody than Flash, still on the stream-input WebSocket.
+MODEL_ID = "eleven_turbo_v2_5"
 OUTPUT_FORMAT = "pcm_24000"
+# Lower stability and some style give a livelier, less monotone delivery.
+VOICE_SETTINGS = {
+    "stability": 0.35,
+    "similarity_boost": 0.8,
+    "style": 0.35,
+    "use_speaker_boost": True,
+}
 
 CANNED_TEXT: dict[str, dict[str, str]] = {
     "ack_deep": {
@@ -55,16 +63,25 @@ class ElevenLabsTTS:
         voice_id: str,
         base_url: str = "wss://api.elevenlabs.io",
         recv_timeout: float = 10.0,
+        model_id: str = MODEL_ID,
+        voice_settings: dict | None = None,
     ) -> None:
         self._recv_timeout = recv_timeout
         self._api_key = api_key
         self._voice_id = voice_id
         self._base_url = base_url.rstrip("/")
+        self._model_id = model_id
+        self._voice_settings = dict(VOICE_SETTINGS if voice_settings is None else voice_settings)
+
+    @property
+    def cache_key(self) -> str:
+        """Identifies the sound of this voice; canned lines are cached per key."""
+        return f"{self._voice_id}-{self._model_id}"
 
     def _url(self, lang: str) -> str:
         query = urlencode(
             {
-                "model_id": MODEL_ID,
+                "model_id": self._model_id,
                 "output_format": OUTPUT_FORMAT,
                 "language_code": lang,
                 "auto_mode": "true",
@@ -73,7 +90,15 @@ class ElevenLabsTTS:
         return f"{self._base_url}/v1/text-to-speech/{self._voice_id}/stream-input?{query}"
 
     async def _send_all(self, ws, chunks: AsyncIterator[str]) -> None:
-        await ws.send(json.dumps({"text": " ", "xi_api_key": self._api_key}))
+        await ws.send(
+            json.dumps(
+                {
+                    "text": " ",
+                    "voice_settings": self._voice_settings,
+                    "xi_api_key": self._api_key,
+                }
+            )
+        )
         async for chunk in chunks:
             if chunk:
                 text = chunk if chunk.endswith(" ") else chunk + " "
