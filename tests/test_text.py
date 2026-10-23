@@ -71,3 +71,36 @@ def test_chunks_are_cleaned():
     c = ClauseChunker()
     assert c.feed("**Certainly** sir, see https://github.com/x ") == ["Certainly sir,"]
     assert c.flush() == ["see github.com"]
+
+
+def _all_chunks(c, *deltas):
+    out = []
+    for d in deltas:
+        out += c.feed(d)
+    return out + c.flush()
+
+
+def _no_delims(chunks):
+    return all(not any(t in ch for t in ("*", "`", "[", "](")) for ch in chunks)
+
+
+def test_emphasis_spanning_boundary_is_clean():
+    chunks = _all_chunks(ClauseChunker(), "**Important, sir. Please note** this.")
+    assert _no_delims(chunks)
+    assert " ".join(chunks) == "Important, sir. Please note this."
+
+
+def test_inline_code_spanning_boundary_is_clean():
+    chunks = _all_chunks(ClauseChunker(), "Run `a, b` now, sir. Then `c, d", "` ok.")
+    assert _no_delims(chunks)
+    assert " ".join(chunks) == "Run a, b now, sir. Then c, d ok."
+
+
+def test_link_spanning_boundary_is_clean():
+    chunks = _all_chunks(ClauseChunker(), "See the [docs, here](https://x.com/a) ok, sir. Bye.")
+    assert _no_delims(chunks)
+    assert " ".join(chunks) == "See the docs, here ok, sir. Bye."
+
+
+def test_unclosed_delimiter_flushes_without_symbols():
+    assert _no_delims(_all_chunks(ClauseChunker(), "**never closed, sir. more"))

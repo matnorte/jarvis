@@ -41,6 +41,19 @@ def clean_for_speech(text: str) -> str:
     return _SPACES.sub(" ", text).strip()
 
 
+_STAR_BULLET = re.compile(r"^[ 	]*\*[ 	]", re.MULTILINE)
+_LEFTOVER = re.compile(r"[*`\[\]]")
+
+
+def _unclosed(prefix: str) -> bool:
+    """True if prefix ends inside inline code, emphasis or a link label."""
+    if prefix.count("`") % 2:
+        return True
+    if _STAR_BULLET.sub("", prefix).count("*") % 2:
+        return True
+    return prefix.count("[") > prefix.count("]")
+
+
 _MIN_FIRST_CHARS = 12
 _ANY_BREAK = re.compile(r"[,;:.!?](?=\s)")
 _SENTENCE_BREAK = re.compile(r"[.!?](?=\s)")
@@ -60,7 +73,8 @@ class ClauseChunker:
         self._first_done = False
 
     def _emit(self, raw: str, out: list[str]) -> None:
-        cleaned = clean_for_speech(raw)
+        # Delimiters left over (flush with an unclosed one) must never be spoken.
+        cleaned = clean_for_speech(_LEFTOVER.sub("", clean_for_speech(raw)))
         if cleaned:
             out.append(cleaned)
 
@@ -78,10 +92,12 @@ class ClauseChunker:
 
     def _find_boundary(self) -> int | None:
         if self._first_done:
-            m = _SENTENCE_BREAK.search(self._buf)
-            return m.end() if m else None
-        for m in _ANY_BREAK.finditer(self._buf):
-            if len(self._buf[: m.end()].strip()) >= _MIN_FIRST_CHARS:
+            pattern, minimum = _SENTENCE_BREAK, 0
+        else:
+            pattern, minimum = _ANY_BREAK, _MIN_FIRST_CHARS
+        for m in pattern.finditer(self._buf):
+            prefix = self._buf[: m.end()]
+            if len(prefix.strip()) >= minimum and not _unclosed(prefix):
                 return m.end()
         return None
 
