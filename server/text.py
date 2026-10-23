@@ -41,7 +41,7 @@ def clean_for_speech(text: str) -> str:
     return _SPACES.sub(" ", text).strip()
 
 
-_STAR_BULLET = re.compile(r"^[ 	]**[ 	]", re.MULTILINE)
+_STAR_BULLET = re.compile(r"^[ 	]*\*[ 	]", re.MULTILINE)
 _LEFTOVER = re.compile(r"[*`\[\]]")
 
 
