@@ -63,6 +63,27 @@ class ConversationTest {
         assertEquals("listening", conv.state.value.orbState)
     }
 
+    @Test fun managedAudioConfigurationWaitsForIdleAndPreservesCaptionsAndTurnRules() {
+        start(); toListening()
+        assertTrue(!conv.configure(Conversation.Config(endSilenceMs = 1200)))
+        frames(5, speech = true); frames(22)
+        assertEquals(Phase.THINKING, phase)
+        conv.onServer(ServerMsg.Transcript("previous question", "en", true))
+        conv.onServer(ServerMsg.ReplyText("previous answer"))
+        conv.onServerAudio(ByteArray(960))
+        conv.onServer(ServerMsg.SpeakingDone); conv.onPlaybackDone()
+        assertEquals(Phase.FOLLOW_UP, phase)
+        assertTrue(!conv.configure(Conversation.Config(endSilenceMs = 1200)))
+        frames(188); reset()
+        assertTrue(conv.configure(Conversation.Config(endSilenceMs = 1200)))
+        assertEquals("previous question", conv.state.value.transcript)
+        assertEquals("previous answer", conv.state.value.reply)
+        assertTrue(calls.isEmpty())
+        toListening(); frames(5, speech = true); frames(22)
+        assertEquals(Phase.LISTENING, phase)
+        frames(16); assertEquals(Phase.THINKING, phase)
+    }
+
     @Test fun endOfSpeechSendsEndUtterance() {
         start(); toListening()
         frames(20, speech = true)

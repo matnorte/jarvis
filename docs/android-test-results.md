@@ -82,6 +82,29 @@ These are automated/emulator/server and installation results.
 Live real-scene answers, accent/noise, camera switching/orientation on the phone,
 voice latency, calls, screen-off wake, and battery drain remain pending.
 
+## Hermes-managed configuration checkpoint (2026-10-24)
+
+Full current source: **103 JVM, 16 emulator and 180 backend tests pass**; debug/test
+APKs build, native plugin JavaScript syntax passes and lint has no errors. Coverage
+includes pairing expiry/cancellation/stale results, encrypted install, strict managed
+settings, safe-idle application with captions retained, and centrally disabled vision.
+The new Settings screen has no editable token or configuration fields; protected
+pairing/status replaces the old setup flow. The reviewed screenshot uses synthetic
+data and production retains FLAG_SECURE.
+
+Control/gateway and native Jarvis plugin are deployed. Actual native browser checks
+saved/restored reboot and front/back preferences, verified persistence across fast/deep
+and blank stored-key inputs. A VPS-local synthetic device was approved through the
+native Jarvis UI, claimed the existing Android credential once, received managed config,
+acknowledged idle, and received a correct artificial-image answer and spoken PCM.
+Credential/private claim remained in server-process memory and were never printed.
+Public internal administration remains inaccessible; gateway health passes.
+
+**The managed APK has not been installed on the physical phone.** Latest USB inventory
+contains only the emulator; reconnection was requested. Install, pair through the
+matching public ID in Hermes, verify Connected, then perform the pending physical
+voice/vision/call/screen-off/battery checks. Do not mark Task 10 complete.
+
 ## Windows commands
 
 See [per-task commands, files, and phone checks](android-task-verification.md).

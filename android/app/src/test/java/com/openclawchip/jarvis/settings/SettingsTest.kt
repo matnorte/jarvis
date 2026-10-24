@@ -82,4 +82,25 @@ class SettingsTest {
         settings()
         assertFalse(raw.containsKey("picovoiceKey"))
     }
+
+    @Test fun managedPreferencesPersistWithoutReplacingTheEncryptedCredential() {
+        val s = settings().apply { deviceToken = "test-device-value" }
+        val encrypted = raw["deviceToken"]
+        val preferences = ManagedPreferences(wakeSensitivity = .8f, endSilenceMs = 950,
+            interruptBySpeech = true, startOnBoot = true, visionEnabled = false, frontCamera = true)
+        s.cacheManaged(7, preferences)
+        assertEquals(7L, settings().managedRevision)
+        assertEquals(preferences, settings().managedPreferences)
+        assertEquals(encrypted, raw["deviceToken"])
+        assertEquals("test-device-value", settings().deviceToken)
+    }
+
+    @Test fun pairingInstallsOnlyAnEncryptedCredentialTogetherWithItsManagedServerPreferences() {
+        val value = ManagedPreferences(serverUrl = "wss://example.org/ws", frontCamera = true)
+        settings().completePairing("dummy-device-token", 3, value)
+        assertEquals("dummy-device-token", settings().deviceToken)
+        assertFalse(raw.values.contains("dummy-device-token"))
+        assertEquals(3L, settings().managedRevision)
+        assertEquals(value, settings().managedPreferences)
+    }
 }

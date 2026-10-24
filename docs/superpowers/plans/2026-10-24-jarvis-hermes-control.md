@@ -51,3 +51,17 @@ own UI. This extends the vision plan. Keep the voice turn/barge-in/drain rules.
 5. Deploy without overwriting existing env secrets or prior server patches; inspect
    the real Hermes tab, pair the connected phone through it, verify Connected and
    continue Task 10 voice/vision/call/screen-off/battery checks. Record actual results.
+
+## Checkpoint, 2026-10-24
+
+Steps 1–4 are implemented with regression coverage: 180 backend, 103 JVM and 16
+emulator tests pass, APKs build, lint has no errors. Web/control/gateway deployment
+is complete. The native Hermes tab was visually reviewed and settings were saved,
+persisted across profiles, and restored. Native plugin activation uses Hermes's
+own config CLI for default/fast/deep; no core patch is required.
+
+A synthetic device on the VPS completed actual native approval and one-use claim,
+managed revision/idle acknowledgement, artificial live-image answer and spoken PCM.
+No secret left the VPS. Step 5's physical-phone installation/pairing and manual
+voice/vision/battery checks remain pending USB reconnection. They are not implied
+by passing server/emulator tests.

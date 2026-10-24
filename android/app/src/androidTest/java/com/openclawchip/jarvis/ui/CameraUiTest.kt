@@ -18,6 +18,34 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CameraUiTest {
+    @Test fun visionDisabledInHermesCannotStartTheCamera() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val fixture = DeviceSettingsFixture(context)
+        instrumentation.uiAutomation.adoptShellPermissionIdentity(Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.POST_NOTIFICATIONS, "android.permission.START_FOREGROUND_SERVICES_FROM_BACKGROUND")
+        try {
+            Settings.open(context).apply {
+                deviceToken = "test-invalid-token"
+                cacheManaged(1, com.openclawchip.jarvis.settings.ManagedPreferences(serverUrl = "wss://127.0.0.1:1/ws", visionEnabled = false))
+            }
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { it.findViewById<View>(R.id.vision_tab).performClick() }
+                var disabled = false
+                val deadline = SystemClock.elapsedRealtime() + 3000
+                while (!disabled && SystemClock.elapsedRealtime() < deadline) {
+                    scenario.onActivity { disabled = !it.findViewById<Button>(R.id.camera_toggle).isEnabled }
+                    if (!disabled) Thread.sleep(50)
+                }
+                assertTrue("Hermes's vision preference must gate local capture", disabled)
+                assertFalse(JarvisService.visionState.value.enabled)
+            }
+        } finally {
+            context.stopService(Intent(context, JarvisService::class.java)); fixture.close()
+            instrumentation.uiAutomation.dropShellPermissionIdentity()
+        }
+    }
+
     @Test fun visionIsExplicitAndLeavingItStopsCameraContext() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext

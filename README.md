@@ -57,10 +57,13 @@ cd android
 The debug APK lands in `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 Install with `adb -s PHONE_SERIAL install -r app/build/outputs/apk/debug/app-debug.apk`
-from `android/`, then open Jarvis. Tap the gear, keep the default WSS URL, and enter
-the device token **only on the phone**. The device token is
-the existing Android entry on the server. Wake detection is offline with sherpa-onnx;
-no Picovoice account or key is required. Save, allow microphone and
+from `android/`, then open Jarvis. In Settings, tap **Pair with Hermes**. Open
+Hermes → Jarvis through the [SSH dashboard](docs/hermes-dashboard.md), match the
+public request identifier on your phone, and approve it there. The credential goes
+directly into encrypted phone settings; no token copying is needed. All voice,
+listening, camera and connection preferences are edited in that native Hermes tab.
+Wake detection is offline with sherpa-onnx; no Picovoice account or key is required.
+After pairing, allow microphone and
 notification permissions, and optionally allow unrestricted battery use.
 
 Say “Jarvis” or tap the orb to talk. Reply during the six-second follow-up window

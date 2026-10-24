@@ -28,6 +28,8 @@ import com.openclawchip.jarvis.ui.UiKit.row
 import com.openclawchip.jarvis.ui.UiKit.space
 import com.openclawchip.jarvis.ui.UiKit.update
 import com.openclawchip.jarvis.vision.CameraStream
+import com.openclawchip.jarvis.settings.Settings
+import com.openclawchip.jarvis.settings.ManagedPreferences
 
 class MainActivity : ComponentActivity() {
     private lateinit var web: WebView
@@ -47,11 +49,15 @@ class MainActivity : ComponentActivity() {
     private lateinit var cameraToggle: Button
     private lateinit var cameraStatus: TextView
     private lateinit var cameraHint: TextView
+    private lateinit var cameraFlip: Button
+    private lateinit var visionTalk: Button
     private lateinit var assistantTab: Button
     private lateinit var visionTab: Button
     private var camera: CameraStream? = null
     private var cameraLink: JarvisService.VisionLink? = null
     private var cameraFront = false
+    private var cameraPreferences = ManagedPreferences()
+    private var lastManagedRevision = 0L
     private var showingVision = false
     private var bridge: OrbBridge? = null
     private var reloadPending = false
@@ -60,6 +66,16 @@ class MainActivity : ComponentActivity() {
         override fun run() {
             val ui = JarvisService.uiState.value
             val running = JarvisService.isRunning
+            val managed = JarvisService.managedState.value
+            if (running && managed.revision > 0 && managed.revision != lastManagedRevision) {
+                stopCamera()
+                cameraPreferences = managed.preferences; cameraFront = cameraPreferences.frontCamera
+                lastManagedRevision = managed.revision
+            }
+            cameraToggle.isEnabled = cameraPreferences.visionEnabled
+            visionTalk.isEnabled = cameraPreferences.visionEnabled
+            cameraFlip.isEnabled = camera != null && cameraPreferences.visionEnabled
+            if (!cameraPreferences.visionEnabled) cameraHint.update("Live vision is turned off in Hermes. Change it in the Jarvis tab.")
             bridge?.push(ui)
             connection.update(connectionLabel(ui, running))
             connection.setTextColor(if (ui.connected) mint else muted)
@@ -91,6 +107,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val cached = Settings.open(this)
+        cameraPreferences = runCatching { cached.managedPreferences }.getOrDefault(ManagedPreferences())
+        cameraFront = cameraPreferences.frontCamera
+        lastManagedRevision = cached.managedRevision
         window.setDecorFitsSystemWindows(false)
         window.statusBarColor = UiKit.background; window.navigationBarColor = UiKit.background
         val root = column().apply { setBackgroundColor(UiKit.background) }
@@ -201,10 +221,12 @@ class MainActivity : ComponentActivity() {
         val controls = row()
         cameraToggle = button("Start camera", true) { if (camera != null) stopCamera() else requestCamera() }.apply { id = R.id.camera_toggle }
         controls.addView(cameraToggle, LinearLayout.LayoutParams(0, dp(54), 1f))
-        controls.addView(button("Flip") { if (camera != null) { stopCamera(); cameraFront = !cameraFront; startCamera() } },
+        cameraFlip = button("Flip") { if (camera != null) { stopCamera(); cameraFront = !cameraFront; startCamera() } }
+        controls.addView(cameraFlip,
             LinearLayout.LayoutParams(dp(76), dp(54)).apply { leftMargin = dp(10) })
         addView(controls); space(10)
-        addView(button("Ask about this") { if (camera == null) requestCamera() else talk() }, LinearLayout.LayoutParams(-1, dp(52)))
+        visionTalk = button("Ask about this") { if (camera == null) requestCamera() else talk() }
+        addView(visionTalk, LinearLayout.LayoutParams(-1, dp(52)))
     }
 
     private fun showVision(show: Boolean) {
@@ -215,11 +237,12 @@ class MainActivity : ComponentActivity() {
         assistantTab.setTextColor(if (show) muted else amber); visionTab.setTextColor(if (show) amber else muted)
     }
     private fun requestCamera() {
+        if (!cameraPreferences.visionEnabled) return
         if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) requestPermissions(arrayOf(Manifest.permission.CAMERA), CAMERA)
         else startCamera()
     }
     private fun startCamera() {
-        if (!showingVision || camera != null) return
+        if (!showingVision || camera != null || !cameraPreferences.visionEnabled) return
         val link = JarvisService.openVision()
         if (link == null) { cameraHint.update("Start Jarvis with the button above, then start the camera."); return }
         cameraLink = link; cameraPlaceholder.visibility = View.GONE; cameraToggle.update("Stop camera")

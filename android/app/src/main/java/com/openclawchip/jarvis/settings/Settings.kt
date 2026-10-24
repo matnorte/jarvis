@@ -30,6 +30,24 @@ class Settings(private val prefs: SharedPreferences, private val box: SecretBox)
     var startOnBoot: Boolean
         get() = prefs.getBoolean("startOnBoot", false)
         set(value) { prefs.edit().putBoolean("startOnBoot", value).apply() }
+    val managedRevision get() = prefs.getLong("managedRevision", 0)
+    val managedPreferences get() = ManagedPreferences(serverUrl, wakeSensitivity, endSilenceMs, interruptBySpeech,
+        startOnBoot, prefs.getBoolean("visionEnabled", true), prefs.getBoolean("frontCamera", false))
+
+    fun cacheManaged(revision: Long, value: ManagedPreferences) {
+        require(revision > 0)
+        check(managedEditor(revision, value).commit()) { "Unable to cache managed preferences" }
+    }
+    fun completePairing(token: String, revision: Long, value: ManagedPreferences) {
+        require(token.isNotBlank() && token.length <= 512 && revision > 0)
+        val encrypted = box.encrypt(token)
+        check(managedEditor(revision, value).putString("deviceToken", encrypted).commit()) { "Unable to save secure pairing" }
+    }
+    private fun managedEditor(revision: Long, value: ManagedPreferences) = prefs.edit()
+        .putLong("managedRevision", revision).putString("serverUrl", value.serverUrl)
+        .putFloat("wakeSensitivity", value.wakeSensitivity).putLong("endSilenceMs", value.endSilenceMs)
+        .putBoolean("interruptBySpeech", value.interruptBySpeech).putBoolean("startOnBoot", value.startOnBoot)
+        .putBoolean("visionEnabled", value.visionEnabled).putBoolean("frontCamera", value.frontCamera)
     val isComplete get() = hasSecret("deviceToken")
     fun hasSecret(name: String) = name == "deviceToken" && !secret(name).isNullOrBlank()
 

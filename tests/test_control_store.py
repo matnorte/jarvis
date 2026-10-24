@@ -27,6 +27,7 @@ def test_settings_survive_restart_and_revisions_change_only_on_valid_save(store)
     {'wake_sensitivity': 1.1}, {'end_silence_ms': True}, {'interrupt_by_speech': 'yes'},
     {'public_url': 'http://example.com'}, {'public_url': 'wss://example.com/ws?token=private'},
     {'public_url': 'wss://example.com:invalid/ws'},
+    {'public_url': 'wss://example.com/ws\n'},
     {'fast_profile': '../elsewhere'}, {'unexpected': 'private-input'}, {'stt_model': 'made-up'},
 ])
 def test_invalid_settings_never_echo_input(store, patch):

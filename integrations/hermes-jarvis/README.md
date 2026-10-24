@@ -21,6 +21,11 @@ SSH tunnel. Its normal session gate also guards the plugin. The plugin's browser
 routes expose only redacted settings, status and explicit pairing approval/decline.
 Private runtime credentials and phone claims are never proxied to that browser.
 
+The installer enables the dashboard extension in default/fast/deep using Hermes's
+native configuration CLI, preserving other plugin selections and environment
+references. It requires the VPS system Python's PyYAML package. A manifest alone
+does not enable a dashboard plugin on this Hermes version.
+
 The control service listens only on `/run/jarvis/control.sock` inside a root/Hermes
 group directory, has no TCP listener/network access, and persists nonsecret settings
 in the existing gateway volume. Keys remain in the existing server deployment `.env`;
@@ -38,5 +43,9 @@ that acknowledgement plus no capture/turn in progress. Phone-only changes preser
 the existing server dependency objects and router history. Cached phone preferences
 continue to support offline wake detection. Legacy clients retain their old wire flow.
 
-The Android pairing/remote-settings UI and final deployment verification are still
-in progress; see `docs/superpowers/plans/2026-10-24-jarvis-hermes-control.md`.
+Android pairing and remote settings are implemented and tested. The native tab,
+private control service and gateway synchronization are deployed. A server-side
+synthetic device completed native approval → claim → managed config → live image
+answer and spoken PCM. Physical-phone installation/pairing and the remaining
+manual voice/battery checks are pending USB reconnection; see
+`docs/superpowers/plans/2026-10-24-jarvis-hermes-control.md`.

@@ -25,7 +25,7 @@ interface Effects {
  * The client's own phase decides when mic audio leaves the phone; server messages only drive
  * display, reply playback and the end of a turn. Timeouts are checked on each mic frame.
  */
-class Conversation(private val fx: Effects, private val config: Config, private val now: () -> Long) {
+class Conversation(private val fx: Effects, private var config: Config, private val now: () -> Long) {
 
     data class Config(
         val endSilenceMs: Long = 700,
@@ -60,6 +60,13 @@ class Conversation(private val fx: Effects, private val config: Config, private 
 
     private val _state = MutableStateFlow(snapshot())
     val state: StateFlow<UiState> = _state.asStateFlow()
+
+    /** Change listening preferences only after the turn, local drain and follow-up have completed. */
+    fun configure(value: Config): Boolean {
+        if (phase != Phase.WAITING && phase != Phase.PAUSED) return false
+        config = value
+        return true
+    }
 
     /** One 32 ms mic frame; [isWake]/[isSpeech] are computed by the caller. */
     fun onFrame(frame: ShortArray, isWake: Boolean, isSpeech: Boolean) {

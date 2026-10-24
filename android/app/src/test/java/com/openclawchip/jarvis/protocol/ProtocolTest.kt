@@ -18,6 +18,21 @@ class ProtocolTest {
         assertEquals("hello" to "android", o.getString("type") to o.getString("device"))
         assertEquals("t", o.getString("token"))
         assertTrue(o.getBoolean("client_vad"))
+        assertTrue(o.getBoolean("client_config"))
+    }
+
+    @Test fun managedConfigurationIsStrictAndIdleAcknowledgementHasNoSecrets() {
+        val prefs = """{"server_url":"wss://jarvis.openclawchip.tech/ws","wake_sensitivity":0.7,"end_silence_ms":900,"interrupt_by_speech":true,"start_on_boot":false,"vision_enabled":false,"front_camera":true}"""
+        val parsed = parseServer("""{"type":"config","revision":2,"settings":$prefs}""") as ServerMsg.ManagedConfig
+        assertEquals(2L, parsed.revision)
+        assertEquals(.7f, parsed.settings.wakeSensitivity, 0f)
+        assertTrue(parsed.settings.frontCamera)
+        assertTrue(parseServer("""{"type":"config","revision":true,"settings":$prefs}""") is ServerMsg.Unknown)
+        assertTrue(parseServer("""{"type":"config","revision":2,"settings":${prefs.replace(":true", ":\"true\"")}}""") is ServerMsg.Unknown)
+        val ack = JSONObject(ClientMsg.configAck(2, false))
+        assertEquals(3, ack.length())
+        assertEquals("config_ack", ack.getString("type")); assertEquals(2L, ack.getLong("revision"))
+        assertEquals(false, ack.getBoolean("idle"))
     }
 
     @Test fun simpleMessagesHaveOnlyType() {

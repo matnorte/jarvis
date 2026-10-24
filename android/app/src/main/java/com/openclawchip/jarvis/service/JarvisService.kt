@@ -13,6 +13,9 @@ import com.openclawchip.jarvis.net.GatewayClient
 import com.openclawchip.jarvis.protocol.ServerMsg
 import com.openclawchip.jarvis.protocol.ClientMsg
 import com.openclawchip.jarvis.settings.Settings
+import com.openclawchip.jarvis.settings.ManagedPreferences
+import com.openclawchip.jarvis.settings.ManagedState
+import com.openclawchip.jarvis.settings.ManagedConfigSync
 import com.openclawchip.jarvis.vision.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -32,6 +35,9 @@ class JarvisService : Service() {
     private var interruptBySpeech = false
     private var conversation: Conversation? = null
     private var client: GatewayClient? = null
+    private var configSync: ManagedConfigSync? = null
+    private var appliedPreferences = ManagedPreferences()
+    private var managedNotice: String? = null
     private class CameraPacket(val epoch: Long, val jpeg: ByteArray)
     private val cameraFrames = Channel<CameraPacket>(1, BufferOverflow.DROP_OLDEST)
     private val vision = LiveVision({ client?.sendText(ClientMsg.camera(it)) }, { client?.sendCameraFrame(it) == true }, SystemClock::elapsedRealtime)
@@ -56,6 +62,7 @@ class JarvisService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        _managedState.value = ManagedState()
         owner = this
         createChannel(this)
         audioManager = getSystemService(AudioManager::class.java)
@@ -110,6 +117,8 @@ class JarvisService : Service() {
         }
         getSystemService(NotificationManager::class.java).cancel(SETUP_NOTIFICATION)
         try {
+            appliedPreferences = settings.managedPreferences
+            _managedState.value = ManagedState(settings.managedRevision, appliedPreferences)
             interruptBySpeech = settings.interruptBySpeech
             lateinit var newOutput: AudioOut
             newOutput = AudioOut(this) { focus ->
@@ -142,26 +151,71 @@ class JarvisService : Service() {
                     }
                 }
             }
-            lateinit var gateway: GatewayClient
-            fun event(block: () -> Unit) { scope.launch {
-                if (!stopping && client === gateway && conversation === conv) { block(); publish() }
-            } }
-            gateway = GatewayClient(settings.serverUrl, settings.deviceToken!!, object : GatewayClient.Listener {
-                override fun onConnected() = event { conv.onConnected(); vision.connected() }
-                override fun onDisconnected() = event { conv.onDisconnected(); vision.disconnected() }
-                override fun onMessage(msg: ServerMsg) = event { conv.onServer(msg) }
-                override fun onAudio(pcm: ByteArray) = event { conv.onServerAudio(pcm) }
-                override fun onRejected(code: Int) = event { conv.onRejected(code); vision.disconnected() }
-            }, scope)
-            client = gateway
+            configSync = ManagedConfigSync(settings.managedRevision, ::applyManaged) { client?.sendText(it) == true }
             collector = scope.launch { conv.state.collect { publish() } }
-            gateway.connect()
+            connectGateway(conv, settings)
             startMic()
         } catch (_: Exception) {
             releasePipeline()
             _uiState.value = idle().copy(notice = "Audio unavailable — reopen Jarvis to retry")
             getSystemService(NotificationManager::class.java).notify(SETUP_NOTIFICATION, notification(this, "Audio unavailable — reopen Jarvis to retry", false))
             stopSelf()
+        }
+    }
+
+    private fun connectGateway(conv: Conversation, settings: Settings) {
+        val old = client; client = null; old?.close()
+        configSync?.disconnected()
+        lateinit var gateway: GatewayClient
+        fun event(block: () -> Unit) { scope.launch {
+            if (!stopping && client === gateway && conversation === conv) { block(); publish() }
+        } }
+        gateway = GatewayClient(settings.serverUrl, settings.deviceToken!!, object : GatewayClient.Listener {
+            override fun onConnected() = event { configSync?.disconnected(); conv.onConnected(); vision.connected() }
+            override fun onDisconnected() = event { configSync?.disconnected(); conv.onDisconnected(); vision.disconnected() }
+            override fun onMessage(msg: ServerMsg) = event {
+                if (msg is ServerMsg.ManagedConfig) configSync?.offer(msg) else conv.onServer(msg)
+            }
+            override fun onAudio(pcm: ByteArray) = event { conv.onServerAudio(pcm) }
+            override fun onRejected(code: Int) = event { configSync?.disconnected(); conv.onRejected(code); vision.disconnected() }
+        }, scope)
+        client = gateway
+        gateway.connect()
+    }
+
+    private fun applyManaged(revision: Long, value: ManagedPreferences): Boolean {
+        val conv = conversation ?: return false
+        if (conv.state.value.phase != Phase.WAITING && conv.state.value.phase != Phase.PAUSED) return false
+        var replacement: WakeWord? = null
+        val changeWake = value.wakeSensitivity != appliedPreferences.wakeSensitivity
+        return try {
+            if (changeWake) replacement = try { SherpaWakeWord(this, value.wakeSensitivity) } catch (_: WakeWordUnavailable) { null }
+            if (stopping || owner !== this || conversation !== conv) { replacement?.close(); return false }
+            val settings = Settings.open(this)
+            if (settings.managedRevision != revision || settings.managedPreferences != value) settings.cacheManaged(revision, value)
+            check(conv.configure(Conversation.Config(endSilenceMs = value.endSilenceMs, interruptBySpeech = value.interruptBySpeech)))
+            if (changeWake) {
+                wake?.close(); wake = replacement; replacement = null
+                engineNotice = if (wake == null) "Wake word unavailable — tap to talk" else null
+            }
+            val moveGateway = value.serverUrl != appliedPreferences.serverUrl
+            interruptBySpeech = value.interruptBySpeech
+            appliedPreferences = value
+            _managedState.value = ManagedState(revision, value)
+            managedNotice = null
+            if (!value.visionEnabled || moveGateway) vision.reset()
+            if (moveGateway) scope.launch {
+                if (!stopping && conversation === conv) {
+                    conv.onDisconnected(); vision.disconnected()
+                    connectGateway(conv, settings)
+                    publish()
+                }
+            }
+            true
+        } catch (_: Exception) {
+            replacement?.close()
+            managedNotice = "Could not apply settings — retry in Hermes"
+            false
         }
     }
 
@@ -218,13 +272,14 @@ class JarvisService : Service() {
     private fun publish() {
         if (stopping || owner !== this) return
         val state = conversation?.state?.value ?: return
+        configSync?.tick(state.phase)
         val active = state.phase in setOf(Phase.LISTENING, Phase.THINKING, Phase.SPEAKING)
         wakeLock?.let { lock ->
             if (active && !lock.isHeld) lock.acquire(10 * 60 * 1000L)
             else if (!active && lock.isHeld) lock.release()
         }
         _uiState.value = state.copy(outLevel = if (state.phase == Phase.SPEAKING) output?.level() ?: 0f else 0f,
-            notice = state.notice ?: micNotice ?: engineNotice)
+            notice = state.notice ?: micNotice ?: engineNotice ?: managedNotice)
         val text = _uiState.value.notice ?: state.phase.name.lowercase().replace('_', ' ')
         if (text != lastNotification) {
             lastNotification = text
@@ -233,6 +288,7 @@ class JarvisService : Service() {
     }
 
     private fun releasePipeline() {
+        configSync = null
         vision.reset()
         micEpoch++
         retry?.cancel(); retry = null
@@ -244,7 +300,7 @@ class JarvisService : Service() {
         output?.close(); output = null
         conversation = null
         wakeLock?.let { if (it.isHeld) it.release() }; wakeLock = null
-        engineNotice = null; micNotice = null; lastNotification = ""
+        engineNotice = null; micNotice = null; managedNotice = null; lastNotification = ""
     }
 
     override fun onDestroy() {
@@ -285,6 +341,8 @@ class JarvisService : Service() {
         private fun idle() = UiState(Phase.WAITING, "idle", 0f, 0f, "", "", false, null)
         private val _uiState = MutableStateFlow(idle())
         private val _visionState = MutableStateFlow(VisionState())
+        private val _managedState = MutableStateFlow(ManagedState())
+        val managedState: StateFlow<ManagedState> = _managedState.asStateFlow()
         private val cameraEpoch = AtomicLong()
         val visionState: StateFlow<VisionState> = _visionState.asStateFlow()
         fun openVision(): VisionLink? {

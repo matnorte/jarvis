@@ -45,6 +45,8 @@ class Preferences(BaseModel):
     @field_validator('public_url')
     @classmethod
     def valid_url(cls, value):
+        if any(character.isspace() for character in value):
+            raise ValueError('Invalid gateway URL')
         parsed = urlsplit(value)
         _ = parsed.port  # Validate a supplied port before synchronizing it to phones.
         if parsed.scheme != 'wss' or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:

@@ -19,5 +19,7 @@ install -o hermes -g hermes -m 0644 "$jarvis_root/integrations/hermes-jarvis/das
 install -o hermes -g hermes -m 0644 "$jarvis_root/integrations/hermes-jarvis/dashboard/dist/style.css" "$plugin_dir/dist/style.css"
 install -o root -g root -m 0644 "$jarvis_root/deploy/jarvis-control.tmpfiles.conf" /etc/tmpfiles.d/jarvis-control.conf
 systemd-tmpfiles --create /etc/tmpfiles.d/jarvis-control.conf
+hermes_account_home=$(getent passwd hermes | cut -d: -f6)
+python3 "$jarvis_root/deploy/enable-hermes-plugin.py" "$hermes_home" "$hermes_account_home/.local/bin/hermes"
 systemctl restart hermes-dashboard
 echo "Installed Jarvis dashboard plugin and private socket directory."

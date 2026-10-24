@@ -13,6 +13,7 @@ ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:9119:127.0.0.1:9119 root@187.127
 
 Keep that terminal running, then open:
 
+- [Jarvis configuration and phone approval](http://127.0.0.1:9119/jarvis?profile=fast)
 - [Fast profile configuration](http://127.0.0.1:9119/config?profile=fast)
 - [Deep profile configuration](http://127.0.0.1:9119/config?profile=deep)
 
@@ -20,6 +21,18 @@ The profile selector chooses which configuration, models, tools, and settings yo
 are editing. Save in the dashboard. Model/session changes generally apply to a new
 agent session; settings loaded by the gateway may need its Restart Gateway action.
 Avoid changing the deployed fast/deep routing setup without testing voice afterward.
+
+The native **Jarvis** tab owns all Jarvis preferences: STT/TTS, voice and write-only
+provider key replacement, listening, startup reminder, vision, routing profiles and
+gateway address. These settings belong to the shared Jarvis service across profiles.
+Changes wait for a safe idle point after the current turn and follow-up. Native
+Hermes Config continues to own agent models, provider authentication and tools.
+
+On the phone, open Settings → Pair with Hermes. Approve only the matching public
+request identifier in this tab within three minutes. No device token needs copying.
+Android permissions and Start camera remain explicit phone actions. Stored keys
+show configured/missing badges and never return to the form. Details and recovery:
+`hermes-jarvis-control.md`.
 
 The running app-created SSH tunnel is temporary. The VPS systemd service survives
 reboot; reconnect the SSH tunnel when needed. The current config page was verified

@@ -269,9 +269,9 @@ dependency lock and managed-configuration docs. Detailed contract:
 `docs/managed-config-protocol.md`. The native plugin reuses Hermes's existing
 dashboard/session gate and SDK; it does not patch Hermes core.
 
-Run the Windows commands in `docs/hermes-jarvis-control.md`. Current server suite:
-179 tests; Android remains 90 JVM / 15 emulator until its central-settings migration.
-Deploy only after the Android step, preserving VPS env files and prior patches.
+Run the Windows commands in `docs/hermes-jarvis-control.md`. Current full suite:
+180 backend / 103 JVM / **OK (16 tests)** on the emulator, APK builds and lint pass.
+Web/control/gateway are deployed, preserving VPS env files and prior patches.
 
 Phone/web checks after that migration: pair by matching the public phone-request
 identifier in Hermes, approve it there, verify Connected without token copying,
@@ -279,3 +279,30 @@ save a listening preference in the native Jarvis tab and verify it applies after
 the turn/follow-up. Reject a request, let one expire, try an incorrect claim, and
 confirm no credential is returned. Verify stored provider keys never reappear.
 All remaining original Task 10 voice/vision/call/screen-off/battery checks still apply.
+
+## Central Hermes configuration: Android migration
+
+Files: new `settings/{ManagedPreferences,ManagedConfigSync,PairingFlow}.kt`,
+`net/PairingClient.kt`, `ui/PairingViewModel.kt`; updated `Settings.kt`,
+`SettingsActivity.kt`, `JarvisService.kt`, `MainActivity.kt`, `Conversation.kt`,
+`Protocol.kt`, stable view IDs and corresponding JVM/native tests. Deployment adds
+`enable-hermes-plugin.py` through `install-hermes-plugin.sh`; gateway URL validation
+also rejects whitespace. These replace the earlier token-editor setup instructions.
+
+Use the full Windows commands in `hermes-jarvis-control.md` (including explicit
+emulator serial for instrumentation). Install the debug APK on the physical phone
+only after USB reconnection, as shown in `android-test-results.md`.
+
+Phone checks: open Settings, tap Pair with Hermes, match the displayed public ID
+in Hermes → Jarvis and approve. Confirm Connected without token copying. Change
+listening preferences during a reply/follow-up: they should apply only when idle
+and retain the current caption. Disable vision in Hermes: capture stops; enabling
+it again must not start the camera. Camera/endpoint changes clear old frames.
+Rotate/background during pairing, retry expired/declined requests and confirm no
+stale request installs credentials. Continue the original Task 10 phone checks.
+
+Actual deployment checks: native form save/restore and secret masking pass; a
+VPS-local synthetic device passed native approval → claim → config → image answer
+and spoken PCM. Physical-phone migration checks remain pending. Screenshots:
+`docs/images/hermes-jarvis-{dashboard,settings}.png`, updated pairing-only
+`docs/images/android-settings-emulator.png`.

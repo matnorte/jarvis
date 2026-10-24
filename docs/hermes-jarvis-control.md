@@ -2,9 +2,9 @@
 
 The owner requested all Jarvis configuration inside Hermes's own dashboard on
 2026-10-24. The native Jarvis tab is implemented as an external dashboard plugin;
-no Hermes core files are changed. The implementation is being delivered in three
-checkpoints: control/plugin foundation, gateway synchronization, Android pairing.
-Do not treat the foundation alone as a completed phone migration or deployment.
+no Hermes core files are changed. All three implementation checkpoints are complete:
+control/plugin foundation, gateway synchronization and Android pairing. The web and
+server components are deployed; the tested Android APK awaits USB installation.
 
 The tab owns recognition/synthesis preferences, ElevenLabs key replacement,
 fast/deep profile selection, gateway address, wake/silence/interruption settings,
@@ -46,7 +46,14 @@ adb -s emulator-5554 shell am instrument -w -r com.openclawchip.jarvis.test/andr
 
 Deployment instructions are in `integrations/hermes-jarvis/README.md`. Preserve the
 existing VPS patches and secret files; do not replace `.env` with repository data.
-After final deployment, verify native form save/persistence, no secret re-display,
-expired/wrong/declined pairing, phone Connected, safe-turn preference sync,
-camera-off behavior and every remaining Task 10 phone check. Record only actual
-results in `android-test-results.md`.
+Current regression totals: 180 backend, 103 JVM and 16 emulator tests, plus passing
+APK builds and lint (no errors). Expiry, wrong claims, decline, stale/cancelled phone
+callbacks, safe-turn application and camera shutdown have automated coverage.
+Native form save/persistence and masked-key behavior were checked in the real UI.
+A synthetic device on the VPS completed approval/claim/config plus an artificial
+image answer and spoken PCM. No physical phone result is implied by that probe.
+
+Next, install the APK on the reconnected phone, pair by matching its request in
+Hermes, verify Connected, save a preference during a turn and check deferred apply.
+Continue camera-off behavior and every remaining Task 10 phone check. Record only
+actual results in `android-test-results.md`.

@@ -1,4 +1,7 @@
 <resources>
+    <item name="pair_start" type="id" />
+    <item name="pair_request" type="id" />
+    <item name="managed_status" type="id" />
     <item name="assistant_toggle" type="id" />
     <item name="settings_token" type="id" />
     <item name="assistant_tab" type="id" />

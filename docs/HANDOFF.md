@@ -171,6 +171,33 @@ hello + config/idle acknowledgements, safe Session dependency replacement, old-c
 compatibility, public bounded pairing relays, retryable control outages and fixed
 apply errors. Full backend suite now passes 179 tests. See
 `docs/managed-config-protocol.md` and `docs/hermes-jarvis-control.md`.
-Neither central-control checkpoint is deployed yet. Android pairing/remote-setting
-migration is next; do not claim all configuration has moved until the phone and
-dashboard flow are tested together. The phone is disconnected at the latest ADB check.
+Central control and gateway synchronization (`b25a7cf`, `63db919`) are now deployed.
+The VPS retains these patches alongside the earlier client-VAD/vision changes as
+local modifications; reconcile before pulling/merging. Existing secret files and
+the Android device token were preserved. The control service has no network and
+listens only on a root/Hermes Unix socket; public internal-runtime access returns
+404. Native Jarvis tabs are enabled for default/fast/deep through the native Hermes
+config CLI, preserving other plugins. No Hermes core file is modified.
+
+Android migration is implemented: Settings contains only pairing/status, no token
+or preference editors. Pairing uses a phone-private capability held in memory,
+explicit matching-ID approval in Hermes, and direct encrypted credential storage.
+Lifecycle cancellation rejects stale claims. Managed settings cache offline and
+apply only in WAITING/PAUSED; configuration preserves captions and turn semantics.
+Camera disable/endpoint changes clear the old stream; no remote setting starts it.
+All Jarvis settings now live in Hermes's Jarvis tab; agent models/providers/tools
+remain on native Hermes Config pages. Permissions are still Android OS prompts.
+
+Latest full verification: **180 backend / 103 JVM / 16 emulator**, APK assemblies
+and lint pass (existing warnings, no errors). Native UI save/persistence checked for
+boot reminder and camera preference, then restored original values. Key inputs are
+blank with configured badges. A VPS-local synthetic device completed native UI
+approval → one-use claim → existing token → managed config/idle ack → artificial
+red image answer and spoken PCM; no credential or private capability was printed
+or left in a file. This is not a physical-phone test.
+
+The new Android APK is ready but not installed on the physical phone: latest ADB
+lists only the emulator. A USB reconnection question is pending. After installation,
+use Settings → Pair with Hermes, approve the actual phone's matching request ID in
+the web tab, verify Connected, and continue original Task 10/manual vision checks.
+Do not resume manual token entry. Do not mark Task 10 complete.
