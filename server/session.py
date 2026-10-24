@@ -154,6 +154,7 @@ class Session:
         canned,
         filler_after: float = 3.0,
         client_vad: bool = False,
+        vision_enabled: bool = True,
     ) -> None:
         self._device = device
         self._send_text = send_text
@@ -166,6 +167,7 @@ class Session:
         self._endpointer = Endpointer(sample_rate=MIC_RATE)
         self._client_vad = client_vad
         self._camera = CameraFrames()
+        self._vision_enabled = vision_enabled
         self._buf = bytearray()
         self._listening = False
         self._closed = False
@@ -193,9 +195,19 @@ class Session:
     def _busy(self) -> bool:
         return self._turn is not None and not self._turn.done()
 
+    def configure(self, *, stt, router, tts, canned, vision_enabled: bool) -> bool:
+        """Caller also requires the managed phone's idle acknowledgement (after local drain/follow-up)."""
+        if self._closed or self._busy() or self._buf:
+            return False
+        self._stt, self._router, self._tts, self._canned = stt, router, tts, canned
+        self._vision_enabled = vision_enabled
+        if not vision_enabled:
+            self._camera.set_enabled(False)
+        return True
+
     def on_camera(self, enabled: bool) -> None:
         if not self._closed:
-            self._camera.set_enabled(enabled)
+            self._camera.set_enabled(enabled and self._vision_enabled)
 
     def on_camera_frame(self, jpeg: str) -> None:
         if not self._closed:

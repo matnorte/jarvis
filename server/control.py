@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import time
 from pathlib import Path
 
@@ -37,8 +38,18 @@ async def _body(request: Request) -> dict:
         raise ControlError('Invalid request') from None
 
 
-def create_control_app(store: ControlStore | None = None) -> FastAPI:
+def create_control_app(store: ControlStore | None = None, *, unix_only: bool | None = None) -> FastAPI:
+    if unix_only is None:
+        unix_only = store is None
     if store is None:
+        directory = Path(os.environ.get('JARVIS_CONTROL_SOCKET', '/run/jarvis/control.sock')).parent
+        try:
+            info = directory.stat()
+            private = info.st_uid == 0 and info.st_gid != 0 and stat.S_IMODE(info.st_mode) == 0o2770
+        except OSError:
+            private = False
+        if not private:
+            raise RuntimeError('Prepare the private root/Hermes socket directory before starting Jarvis control')
         store = ControlStore(Path(os.environ.get('JARVIS_CONTROL_STATE', '/app/cache/control/settings.json')),
                              Path(os.environ.get('JARVIS_ENV_FILE', '/app/deploy-config/.env')))
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
@@ -48,6 +59,9 @@ def create_control_app(store: ControlStore | None = None) -> FastAPI:
 
     @app.middleware('http')
     async def no_store(request, call_next):
+        address = request.scope.get('server')
+        if unix_only and not (address and isinstance(address[0], str) and address[0].startswith('/') and address[1] is None):
+            return JSONResponse({'error': 'Private socket access required'}, status_code=403, headers={'Cache-Control': 'no-store'})
         response = await call_next(request)
         response.headers['Cache-Control'] = 'no-store'
         return response

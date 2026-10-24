@@ -13,6 +13,13 @@ class Hello:
     token: str
     device: str
     client_vad: bool = False
+    client_config: bool = False
+
+
+@dataclass(frozen=True)
+class ConfigAck:
+    revision: int
+    idle: bool
 
 
 @dataclass(frozen=True)
@@ -44,7 +51,7 @@ class TextInput:
     lang: str = "en"
 
 
-ClientMsg = Hello | EndUtterance | Interrupt | TextInput | Camera | CameraFrame
+ClientMsg = Hello | EndUtterance | Interrupt | TextInput | Camera | CameraFrame | ConfigAck
 
 
 def _str_field(data: dict, key: str) -> str:
@@ -66,7 +73,15 @@ def parse_client(text: str) -> ClientMsg:
         client_vad = data.get("client_vad", False)
         if not isinstance(client_vad, bool):
             raise ProtocolError("invalid field: client_vad (expected boolean)")
-        return Hello(_str_field(data, "token"), _str_field(data, "device"), client_vad)
+        client_config = data.get('client_config', False)
+        if not isinstance(client_config, bool):
+            raise ProtocolError('invalid field: client_config (expected boolean)')
+        return Hello(_str_field(data, "token"), _str_field(data, "device"), client_vad, client_config)
+    if kind == 'config_ack':
+        revision, idle = data.get('revision'), data.get('idle')
+        if type(revision) is not int or revision < 0 or not isinstance(idle, bool):
+            raise ProtocolError('invalid configuration acknowledgement')
+        return ConfigAck(revision, idle)
     if kind == "end_utterance":
         return EndUtterance()
     if kind == "interrupt":
@@ -95,6 +110,10 @@ def _dump(payload: dict) -> str:
 
 def state(s: str) -> str:
     return _dump({"type": "state", "state": s})
+
+
+def config(revision: int, settings: dict) -> str:
+    return _dump({'type': 'config', 'revision': revision, 'settings': settings})
 
 
 def transcript(text: str, lang: str, final: bool) -> str:

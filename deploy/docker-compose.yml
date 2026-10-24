@@ -10,7 +10,11 @@ services:
     volumes:
       - gateway_cache:/app/cache
       - ./:/app/deploy-config
-      - /run/jarvis:/run/jarvis
+      - type: bind
+        source: /run/jarvis
+        target: /run/jarvis
+        bind:
+          create_host_path: false
     restart: unless-stopped
 
   gateway:
@@ -27,7 +31,11 @@ services:
     volumes:
       - hf_cache:/root/.cache/huggingface
       - gateway_cache:/app/cache
-      - /run/jarvis:/run/jarvis
+      - type: bind
+        source: /run/jarvis
+        target: /run/jarvis
+        bind:
+          create_host_path: false
     depends_on:
       - control
     restart: unless-stopped

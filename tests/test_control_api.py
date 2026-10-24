@@ -54,3 +54,14 @@ async def test_runtime_is_private_control_only_and_reports_gateway_apply_state(s
         assert invalid.status_code == 400 and 'sensitive' not in invalid.text
         malformed = await client.put('/internal/status', json={'revision': 1, 'online': True, 'error': []})
         assert malformed.status_code == 400
+
+
+async def test_production_control_refuses_tcp_even_if_started_on_a_tcp_listener(store):
+    app = create_control_app(store, unix_only=True)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://control') as client:
+        response = await client.get('/internal/runtime')
+        assert response.status_code == 403 and 'test-hermes-key' not in response.text
+    async def unix(scope, receive, send):
+        await app({**scope, 'server': ('/run/jarvis/control.sock', None)}, receive, send)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=unix), base_url='http://control') as client:
+        assert (await client.get('/settings')).status_code == 200

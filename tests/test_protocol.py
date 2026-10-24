@@ -9,6 +9,20 @@ def test_parse_hello():
     assert parse_client('{"type":"hello","token":"t","device":"win"}') == Hello("t", "win")
 
 
+def test_managed_config_is_opt_in_and_idle_ack_is_strict():
+    from server.protocol import ConfigAck, config
+    assert parse_client('{"type":"hello","token":"t","device":"android","client_config":true}').client_config
+    assert not parse_client('{"type":"hello","token":"t","device":"win"}').client_config
+    assert parse_client('{"type":"config_ack","revision":2,"idle":true}') == ConfigAck(2, True)
+    assert json.loads(config(2, {'wake_sensitivity': .7})) == {'type':'config', 'revision':2, 'settings':{'wake_sensitivity':.7}}
+    for raw in ('{"type":"hello","token":"t","device":"android","client_config":1}',
+                '{"type":"config_ack","revision":true,"idle":true}',
+                '{"type":"config_ack","revision":-1,"idle":true}',
+                '{"type":"config_ack","revision":1,"idle":"true"}'):
+        with pytest.raises(ProtocolError):
+            parse_client(raw)
+
+
 def test_camera_protocol_is_explicit_bounded_and_does_not_repr_image_data():
     from server.protocol import Camera, CameraFrame
     assert parse_client('{"type":"camera","enabled":true}') == Camera(True)

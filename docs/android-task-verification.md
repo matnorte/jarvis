@@ -259,3 +259,23 @@ Phone check: a rejected token gives the actionable header. Replace it in Setting
 with only the Android token value, without a device label or quotes. Save & connect
 reloads the client, then confirm Connected and try a spoken question. Never paste
 the token into chat or logs. Do not rotate server tokens merely to debug this UI.
+
+## Central Hermes configuration: service and gateway checkpoints
+
+Files: `server/control{,_store,_client}.py`, `managed_runtime.py`, `pairing.py`,
+`app.py`, `main.py`, `protocol.py`, `session.py`, new control/runtime/pairing tests,
+`integrations/hermes-jarvis/`, Compose/Caddy/private-socket deployment files,
+dependency lock and managed-configuration docs. Detailed contract:
+`docs/managed-config-protocol.md`. The native plugin reuses Hermes's existing
+dashboard/session gate and SDK; it does not patch Hermes core.
+
+Run the Windows commands in `docs/hermes-jarvis-control.md`. Current server suite:
+179 tests; Android remains 90 JVM / 15 emulator until its central-settings migration.
+Deploy only after the Android step, preserving VPS env files and prior patches.
+
+Phone/web checks after that migration: pair by matching the public phone-request
+identifier in Hermes, approve it there, verify Connected without token copying,
+save a listening preference in the native Jarvis tab and verify it applies after
+the turn/follow-up. Reject a request, let one expire, try an incorrect claim, and
+confirm no credential is returned. Verify stored provider keys never reappear.
+All remaining original Task 10 voice/vision/call/screen-off/battery checks still apply.

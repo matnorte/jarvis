@@ -162,3 +162,15 @@ including phone pairing and voice/camera preferences. Implement as a native Herm
 dashboard plugin (upstream supports tabs/API extensions); do not patch Hermes core.
 Android permissions remain OS prompts and phone credentials remain Keystore-encrypted.
 This configuration work is now active; preserve the original pending phone tests.
+
+Control/plugin foundation committed as `b25a7cf`: native Hermes Jarvis tab, private
+UDS configuration API, masked ElevenLabs-key replacement, bounded approved pairing,
+deployment/socket-directory setup. Full checkpoint: 168 backend / 90 JVM / 15
+emulator tests. Gateway synchronization now implemented locally: managed opt-in
+hello + config/idle acknowledgements, safe Session dependency replacement, old-client
+compatibility, public bounded pairing relays, retryable control outages and fixed
+apply errors. Full backend suite now passes 179 tests. See
+`docs/managed-config-protocol.md` and `docs/hermes-jarvis-control.md`.
+Neither central-control checkpoint is deployed yet. Android pairing/remote-setting
+migration is next; do not claim all configuration has moved until the phone and
+dashboard flow are tested together. The phone is disconnected at the latest ADB check.

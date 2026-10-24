@@ -532,6 +532,47 @@ async def test_enabled_camera_without_fresh_frame_gives_explicit_error_not_a_gue
     await h.session.close()
 
 
+async def test_configuration_cannot_replace_dependencies_during_capture_or_answer():
+    h = Harness(router=FakeRouter([.05, Delta('Original response.')]), client_vad=True)
+    replacement = FakeRouter([Delta('New response.')])
+    def configure():
+        return h.session.configure(stt=h.stt, router=replacement, tts=h.tts, canned=h.canned, vision_enabled=True)
+    await h.session.on_audio(frame(5000))
+    assert not configure()
+    await h.session.on_end_utterance()
+    assert not configure()
+    await h.session.join()
+    assert configure()
+    await h.session.on_text('next question')
+    await h.session.join()
+    assert replacement.calls == [('dev', 'next question', 'en')]
+    await h.session.on_interrupt()  # A paused client sends interrupt without starting another capture.
+    assert configure()
+    await h.session.close()
+    assert not configure()
+
+
+async def test_disabling_vision_releases_current_frame_and_rejects_further_camera_activation():
+    from test_vision import jpeg, encoded
+    class VisionRouter(FakeRouter):
+        images = []
+        async def ask(self, device, text, lang, image=None):
+            self.images.append(image)
+            async for event in super().ask(device, text, lang):
+                yield event
+    router = VisionRouter([Delta('A reply.')])
+    h = Harness(router=router)
+    h.session.on_camera(True)
+    h.session.on_camera_frame(encoded(jpeg()))
+    assert h.session.configure(stt=h.stt, router=router, tts=h.tts, canned=h.canned, vision_enabled=False)
+    h.session.on_camera(True)
+    h.session.on_camera_frame(encoded(jpeg()))
+    await h.session.on_text('what do you see')
+    await h.session.join()
+    assert router.images == [None]
+    await h.session.close()
+
+
 async def test_turn_timings_are_logged_without_content(caplog):
     caplog.set_level("INFO", logger="server.session")
     h = Harness(router=FakeRouter([Delta("Secret answer text. ")]))
