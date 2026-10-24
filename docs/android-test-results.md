@@ -51,6 +51,10 @@ redesign, live camera vision, and Hermes's own web configuration interface. Full
 and battery verification will run against that updated build rather than continuing
 Picovoice setup.
 
+Offline wake extension: 83 JVM tests and all 11 emulator tests pass, including bundled
+model silence rejection and detection of “Jarvis” in a locally generated speech fixture.
+No real-person wake/noise or battery result is implied. Backend remains 130 passing.
+
 ## Windows commands
 
 See [per-task commands, files, and phone checks](android-task-verification.md).

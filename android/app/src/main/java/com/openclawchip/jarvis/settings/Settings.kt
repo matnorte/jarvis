@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import java.net.URI
 
 class Settings(private val prefs: SharedPreferences, private val box: SecretBox) {
+    init { if (prefs.contains("picovoiceKey")) prefs.edit().remove("picovoiceKey").apply() }
     var serverUrl: String
         get() = prefs.getString("serverUrl", DEFAULT_URL)!!
         set(value) {
@@ -17,9 +18,6 @@ class Settings(private val prefs: SharedPreferences, private val box: SecretBox)
     var deviceToken: String?
         get() = secret("deviceToken")
         set(value) = saveSecret("deviceToken", value)
-    var picovoiceKey: String?
-        get() = secret("picovoiceKey")
-        set(value) = saveSecret("picovoiceKey", value)
     var wakeSensitivity: Float
         get() = prefs.getFloat("wakeSensitivity", 0.6f)
         set(value) { require(value in 0f..1f); prefs.edit().putFloat("wakeSensitivity", value).apply() }
@@ -32,8 +30,8 @@ class Settings(private val prefs: SharedPreferences, private val box: SecretBox)
     var startOnBoot: Boolean
         get() = prefs.getBoolean("startOnBoot", false)
         set(value) { prefs.edit().putBoolean("startOnBoot", value).apply() }
-    val isComplete get() = hasSecret("deviceToken") && hasSecret("picovoiceKey")
-    fun hasSecret(name: String) = name in setOf("deviceToken", "picovoiceKey") && !secret(name).isNullOrBlank()
+    val isComplete get() = hasSecret("deviceToken")
+    fun hasSecret(name: String) = name == "deviceToken" && !secret(name).isNullOrBlank()
 
     private fun secret(name: String): String? = try {
         prefs.getString(name, null)?.let(box::decrypt)?.takeUnless(String::isBlank)

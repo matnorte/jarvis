@@ -91,18 +91,6 @@ class AudioAdaptersSmokeTest {
     }
 
     @Test
-    fun porcupine_invalidKey_throwsWithoutLeakingKey() {
-        val key = "invalid-key-DO-NOT-LEAK-123"
-        try {
-            PorcupineWakeWord(context, key, 0.6f).close()
-            fail("expected WakeWordUnavailable")
-        } catch (e: WakeWordUnavailable) {
-            assertFalse(e.message.orEmpty().contains(key))
-            assertFalse(e.cause?.message.orEmpty().contains(key))
-        }
-    }
-
-    @Test
     fun audioIn_constructs() {
         AudioIn { }
     }

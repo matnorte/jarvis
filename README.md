@@ -58,9 +58,9 @@ The debug APK lands in `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 Install with `adb -s PHONE_SERIAL install -r app/build/outputs/apk/debug/app-debug.apk`
 from `android/`, then open Jarvis. Tap the gear, keep the default WSS URL, and enter
-the device token and Picovoice AccessKey **only on the phone**. The device token is
-the existing Android entry on the server; get the wake-word AccessKey from
-[Picovoice Console](https://console.picovoice.ai/). Save, allow microphone and
+the device token **only on the phone**. The device token is
+the existing Android entry on the server. Wake detection is offline with sherpa-onnx;
+no Picovoice account or key is required. Save, allow microphone and
 notification permissions, and optionally allow unrestricted battery use.
 
 Say “Jarvis” or tap the orb to talk. Reply during the six-second follow-up window
@@ -72,3 +72,7 @@ The shared offline orb lives in `ui/orb/`; Gradle syncs it into generated app as
 See [task verification](docs/android-task-verification.md) for Windows commands and
 phone checks, and [device results](docs/android-test-results.md) for the remaining
 manual verification.
+
+The official Hermes configuration UI is available through an SSH tunnel; see
+[Hermes dashboard](docs/hermes-dashboard.md). Offline wake runtime/model download
+versions and hashes are documented in [wake assets](android/WAKE_ASSETS.md).

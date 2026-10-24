@@ -32,7 +32,6 @@ class SettingsActivity : Activity() {
             return input
         }
         val token = secret("Device token", "deviceToken")
-        val key = secret("Picovoice key", "picovoiceKey")
         val sensitivity = field("Wake sensitivity (0–1)", settings.wakeSensitivity.toString())
         val silence = field("End silence (100–5000 ms)", settings.endSilenceMs.toString())
         val interrupt = CheckBox(this).apply { text = "Interrupt by speech"; isChecked = settings.interruptBySpeech; form.addView(this) }
@@ -50,8 +49,7 @@ class SettingsActivity : Activity() {
                     settings.wakeSensitivity = wake; settings.endSilenceMs = end
                     settings.interruptBySpeech = interrupt.isChecked; settings.startOnBoot = boot.isChecked
                     if (token.text.isNotBlank()) settings.deviceToken = token.text.toString()
-                    if (key.text.isNotBlank()) settings.picovoiceKey = key.text.toString()
-                    token.text.clear(); key.text.clear()
+                    token.text.clear()
                     // MainActivity reloads the service with the newly saved configuration on resume.
                     setResult(RESULT_OK); finish()
                 } catch (_: Exception) {

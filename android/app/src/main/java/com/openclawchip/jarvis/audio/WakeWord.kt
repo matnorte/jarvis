@@ -5,5 +5,5 @@ interface WakeWord : AutoCloseable {
     fun process(frame: ShortArray): Boolean
 }
 
-/** Wake-word engine could not start. The message never contains the access key. */
+/** Wake-word engine could not start. Never includes credentials or native exception details. */
 class WakeWordUnavailable(reason: String) : Exception(reason)

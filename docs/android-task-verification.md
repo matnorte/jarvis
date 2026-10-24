@@ -2,6 +2,8 @@
 
 Run commands from the repository root in **Windows Git Bash**. Start the Android emulator first.
 Never enter real credentials in tests, commands, logs, or this document. Enter them only on the phone.
+The numbered Task 6–9 entries document the original implementation. Picovoice-specific
+setup is superseded by the offline-wake extension below.
 
 ## Task 6 review fixes
 
@@ -138,3 +140,26 @@ If Windows is low on RAM, use `--max-workers=2`,
 instrumentation. A fresh headless AVD with 2 GB RAM resolved a stalled WebView test;
 the orb then passed its JavaScript/console checks and a screenshot was captured in
 `docs/images/android-orb-emulator.png`.
+
+## Extension 1: account-free offline wake
+
+Files: `audio/SherpaWakeWord.kt` replaces `PorcupineWakeWord.kt`; `WakeWord.kt`,
+`settings/Settings.kt`, `SettingsActivity.kt`, `JarvisService.kt`; Gradle verified
+model/runtime download and ABI packaging; `assets/wake/keywords.txt`; JVM settings
+migration and adapter lifecycle tests; native silence/synthetic-JARVIS test;
+service/WebView smoke fixtures; generated test speech and `android/WAKE_ASSETS.md`.
+
+```bash
+export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"
+cd android
+./gradlew testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug
+```
+
+Then run the explicitly targeted emulator instrumentation commands above. The first
+build downloads pinned public runtime/model artifacts with SHA-256 checks. Only
+the device token is required in settings; an old encrypted Picovoice value is removed.
+
+Phone checks: setup has no Picovoice field/account link; token survives upgrading;
+say “Jarvis” with a Portuguese and English question, adjust wake sensitivity if
+needed, test false triggers during reply playback and wake while screen off. The
+real accent/noise/battery checks remain manual even when the synthetic wake test passes.

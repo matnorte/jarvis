@@ -42,16 +42,17 @@ class ServiceSmokeTest {
         waitUntil { notifications.activeNotifications.any { it.notification.extras.getCharSequence("android.text") == "Set up Jarvis" } }
         assertEquals("Set up Jarvis", JarvisService.uiState.value.notice)
     }
-    @Test fun completeSettingsStartsForegroundAndInvalidWakeKeyKeepsTapAvailable() {
+    @Test fun completeSettingsStartsForegroundWithoutAnyWakeAccount() {
         Settings.open(context).apply {
-            deviceToken = "test-invalid-token"; picovoiceKey = "test-invalid-key"
+            deviceToken = "test-invalid-token"
             serverUrl = "wss://127.0.0.1:1/ws"
         }
         launch()
         val notifications = context.getSystemService(NotificationManager::class.java)
         waitUntil { notifications.activeNotifications.any {
             it.notification.flags and android.app.Notification.FLAG_FOREGROUND_SERVICE != 0
-        } && JarvisService.uiState.value.notice?.contains("Wake word unavailable") == true }
+        } && JarvisService.uiState.value.phase == com.openclawchip.jarvis.core.Phase.OFFLINE &&
+            JarvisService.uiState.value.notice == null }
         context.startService(Intent(context, JarvisService::class.java).setAction(JarvisService.ACTION_STOP))
         waitUntil { notifications.activeNotifications.none { it.notification.flags and android.app.Notification.FLAG_FOREGROUND_SERVICE != 0 } }
     }

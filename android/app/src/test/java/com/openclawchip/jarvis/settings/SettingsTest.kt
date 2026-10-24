@@ -37,31 +37,27 @@ class SettingsTest {
         assertEquals(0.6f, s.wakeSensitivity, 0f)
         assertEquals(700L, s.endSilenceMs)
         assertFalse(s.interruptBySpeech); assertFalse(s.startOnBoot)
-        assertNull(s.deviceToken); assertNull(s.picovoiceKey)
+        assertNull(s.deviceToken)
     }
 
     @Test fun secretsStoredEncryptedAndSurviveReload() {
-        settings().apply { deviceToken = "test-device-value"; picovoiceKey = "test-picovoice-value" }
+        settings().apply { deviceToken = "test-device-value" }
         assertFalse(raw.values.contains("test-device-value"))
-        assertFalse(raw.values.contains("test-picovoice-value"))
         assertEquals("test-device-value", settings().deviceToken)
-        assertEquals("test-picovoice-value", settings().picovoiceKey)
         assertTrue(settings().hasSecret("deviceToken"))
     }
 
-    @Test fun isCompleteNeedsBothAndBlankRemovesSecret() {
+    @Test fun onlyDeviceTokenIsNeededAndBlankRemovesIt() {
         val s = settings()
         assertFalse(s.isComplete)
-        s.deviceToken = "example"; assertFalse(s.isComplete)
-        s.picovoiceKey = "example"; assertTrue(s.isComplete)
+        s.deviceToken = "example"; assertTrue(s.isComplete)
         s.deviceToken = " "; assertFalse(s.isComplete)
         assertFalse(s.hasSecret("deviceToken"))
     }
 
     @Test fun toStringHidesSecrets() {
-        val s = settings().apply { deviceToken = "test-device-value"; picovoiceKey = "test-key-value" }
+        val s = settings().apply { deviceToken = "test-device-value" }
         assertFalse(s.toString().contains("test-device-value"))
-        assertFalse(s.toString().contains("test-key-value"))
     }
 
     @Test fun rejectsNonWssAndCredentialBearingUrls() {
@@ -77,7 +73,13 @@ class SettingsTest {
             override fun encrypt(plain: String) = plain
             override fun decrypt(cipher: String): String = error("sensitive cause")
         }
-        settings().apply { deviceToken = "example"; picovoiceKey = "example" }
+        settings().apply { deviceToken = "example" }
         assertFalse(Settings(prefs, broken).isComplete)
+    }
+
+    @Test fun legacyPicovoiceCredentialIsRemovedDuringMigration() {
+        raw["picovoiceKey"] = "old-encrypted-value"
+        settings()
+        assertFalse(raw.containsKey("picovoiceKey"))
     }
 }

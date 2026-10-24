@@ -109,6 +109,10 @@ tokens. Native dashboard is now enabled as `hermes-dashboard.service`, loopback
 9119 only, and verified in-browser through a temporary local SSH tunnel. See
 `docs/hermes-dashboard.md` and the new extension plan
 `docs/superpowers/plans/2026-10-23-jarvis-vision.md`.
-Selected sherpa-onnx open-vocabulary offline KWS as the account-free replacement;
-official Hermes API supports structured image_url input. Runtime/model downloads
-are currently in ignored `android/app/build/wake-download/` for checksum inspection.
+Sherpa-onnx offline KWS is implemented: pinned 2.0.0 static runtime, ~5.5 MB quantized
+chunk-8 model, explicit JARVIS phonemes, no account/key. Legacy encrypted Picovoice
+setting removed on open; device token alone completes setup. 83 JVM / 11 emulator /
+130 backend tests pass, including silence and synthetic JARVIS detection. See
+`android/WAKE_ASSETS.md`. Only arm64-v8a and x86_64 are packaged.
+Official Hermes API supports structured image_url input. Live camera/backend vision
+and full UI redesign are next; phone manual voice/battery checks remain pending.

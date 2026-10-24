@@ -31,7 +31,7 @@ class OrbWebViewTest {
             Manifest.permission.POST_NOTIFICATIONS, "android.permission.START_FOREGROUND_SERVICES_FROM_BACKGROUND")
         try {
             Settings.open(context).apply {
-                deviceToken = "test-invalid-token"; picovoiceKey = "test-invalid-key"
+                deviceToken = "test-invalid-token"
                 serverUrl = "wss://127.0.0.1:1/ws"
             }
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->

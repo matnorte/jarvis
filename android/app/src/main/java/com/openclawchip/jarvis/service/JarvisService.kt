@@ -101,7 +101,7 @@ class JarvisService : Service() {
             }
             output = newOutput
             vad = SileroVad(this)
-            wake = try { PorcupineWakeWord(this, settings.picovoiceKey!!, settings.wakeSensitivity) }
+            wake = try { SherpaWakeWord(this, settings.wakeSensitivity) }
                 catch (_: WakeWordUnavailable) { engineNotice = "Wake word unavailable — tap to talk"; null }
             wakeLock = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "jarvis:turn").apply { setReferenceCounted(false) }
             val fx = object : Effects {
