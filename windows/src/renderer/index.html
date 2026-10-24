@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; media-src 'self' blob:; worker-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Jarvis</title><link rel="stylesheet" href="/ui.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-orb" aria-hidden="true"></span><span>JARVIS<small>PERSONAL ASSISTANT</small></span></div>
+    <div class="window-actions"><button id="hermes" class="quiet">Open Hermes ↗</button><button id="compact" class="quiet" title="Toggle compact window">Compact</button><button id="hide" class="quiet" title="Keep Jarvis in the system tray">Hide</button></div>
+  </header>
+  <main>
+    <section class="assistant" aria-label="Voice assistant">
+      <div class="assistant-heading"><p class="eyebrow">A LITTLE PRESENCE. A LOT OF POSSIBILITY.</p><h1 id="headline">At your service.</h1><div id="connection" class="badge"><span class="dot"></span><span id="connection-label">Ready to pair</span></div></div>
+      <div class="orb-stage"><iframe id="orb" src="/orb/orb.html?embedded=1" title="Jarvis golden orb" sandbox="allow-scripts allow-same-origin" tabindex="-1"></iframe><button id="orb-talk" aria-label="Talk to Jarvis" title="Talk or interrupt a reply"></button></div>
+      <div class="phase-row"><span id="phase">MICROPHONE OFF</span><span class="phase-rule"></span><span id="wake-hint">Start when you’re ready</span></div>
+      <div class="controls"><button id="start" class="primary">Start listening</button><button id="talk" class="secondary">Talk now <kbd>Ctrl Shift Space</kbd></button></div>
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+      <article class="conversation" aria-label="Latest conversation"><p class="eyebrow">THE CONVERSATION</p><p id="transcript" class="transcript">Your next idea starts with a word.</p><p id="reply" class="reply">Say “Jarvis” or use the talk shortcut. I’ll take it from there.</p></article>
+    </section>
+    <aside>
+      <section class="card pairing"><span class="card-number">01 / CONNECTION</span><h2 id="pair-title">Make this PC yours.</h2><p id="pair-description">Pair once in Hermes. Your voice, listening preferences and assistant stay together.</p><div id="request" class="request" hidden><span>APPROVE THIS WINDOWS PC</span><strong id="request-id"></strong><small id="expires"></small></div><button id="pair" class="secondary wide">Pair with Hermes</button><button id="cancel-pair" class="quiet wide" hidden>Cancel pairing</button><p id="pair-message" class="small" role="status"></p></section>
+      <section class="card"><span class="card-number">02 / ALWAYS WITHIN REACH</span><h2>A word. Or a shortcut.</h2><div class="shortcut"><kbd>Ctrl</kbd><span>+</span><kbd>Shift</kbd><span>+</span><kbd>Space</kbd></div><p>Talk from any app. Use the shortcut again to interrupt a reply.</p><div class="divider"></div><p class="small">Closing this window keeps Jarvis in your tray. Pause listening to release the microphone, or Quit from the tray to stop the app.</p></section>
+      <section class="privacy"><span class="privacy-mark" aria-hidden="true">◈</span><p><strong>Your settings, one home.</strong><br>Configure Jarvis in Hermes. Your device credential stays encrypted by Windows.</p></section>
+    </aside>
+  </main>
+  <footer><span><span id="mic-dot" class="dot"></span><span id="mic-status">Microphone off</span></span><span id="revision">OFFLINE WAKE · NO ACCOUNT OR KEY</span><span>JARVIS / WINDOWS</span></footer>
+  <script type="module" src="/renderer.mjs"></script>
+</body>
+</html>

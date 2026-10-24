@@ -42,7 +42,18 @@ Firewall allows only 22, 80, 443. Hermes (8642) and the gateway (8000) bind 127.
 end-of-upload -> transcript / first reply text / first audio per sample and exits non-zero
 if the median to first audio exceeds 2.0 s.
 
-## Android
+## Windows
+
+The Windows voice companion lives in `windows/`: offline Jarvis wake, the shared
+golden orb, system tray, compact mode and Ctrl+Shift+Space to talk/interrupt. Pair
+with Hermes and approve the matching Windows PC request; preferences stay in the
+native [Hermes dashboard](https://jarvis.openclawchip.tech/jarvis?profile=fast).
+The Windows credential is separate from Android and protected with Windows DPAPI.
+
+See [Windows setup/build](windows/README.md) and
+[task verification](docs/windows-task-verification.md) for commands and manual checks.
+
+## Android client
 
 Native Kotlin client in `android/` (package `com.openclawchip.jarvis`, minSdk 31).
 Build and run the JVM tests with Android Studio's JDK and an SDK path in

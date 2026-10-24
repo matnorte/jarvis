@@ -11,3 +11,10 @@
 Use branch `codex/windows` from the tested Android release source. Do not merge
 Android into main or overwrite VPS patches. Preserve all deployed credentials and
 the user's existing personal phone connection. No automatic PC control or camera.
+
+Implementation checkpoint: steps 1–6 are implemented, packaged and automatically
+verified (200 backend, 103 Android JVM, 16 emulator, 45 Windows tests). Native UI
+was visually reviewed; the owner confirmed Windows pairing and wake. The v0.1.1
+long-answer correction is installed and passes burst-playback smoke checks. Real
+long-answer retesting, hotkey/tray/sleep checks and measured latency remain manual
+checks; see `docs/windows-task-verification.md` for commands and current evidence.

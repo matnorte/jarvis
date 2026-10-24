@@ -262,4 +262,37 @@ each other. These additive metadata changes are in `managed-config-protocol.md`.
 Backend tests pass 200; Windows foundation tests pass 31, including real native
 silence rejection and synthetic Jarvis detection. Android 103 JVM/APK/lint and
 all 16 emulator tests pass before the first Windows-related commit.
-Client files are under `windows/`; native UI/integration/packaging are next.
+Client files are under `windows/`; native UI/integration/packaging are implemented.
+The owner approved Windows pairing and confirmed Paired/Connected. Its encrypted
+cache is at `%APPDATA%/jarvis-windows/pairing.json` (revision 6 observed, no secret
+value read/displayed). Native window was visually reviewed; screenshot is
+`docs/images/windows-assistant.png`. Dev, unpacked and portable smoke modes use
+isolated fake input and exercise actual DPAPI, native inference and Web Audio.
+
+The owner reported wake succeeds but long/deep answers stop with the microphone
+permission message. Reproduced: the original 30-second reply queue overflowed on
+burst TTS and routed playback failure into microphone shutdown. v0.1.1 expands the
+bounded queue to ten minutes/28.8 MB, separates generation-checked playback errors,
+keeps healthy capture alive when cancelling an oversized reply, and safely retries
+a failed output context without closing a replacement. First failing tests preceded
+each fix. Windows tests now pass 45; native two-minute burst smoke passes in source,
+unpacked and portable builds. A 64-second deep-thinking regression also passes.
+
+v0.1.1 is installed at `%LOCALAPPDATA%/Programs/Jarvis/Jarvis.exe`; the per-user
+installer completed successfully and encrypted pairing/revision 6 remains present.
+The owner's long-answer retest is pending; do not claim real-device resolution yet.
+The Windows core is committed as `102dc05`, after pairing foundation `9250806`.
+Desktop shell, packaging and verification are recorded in the following commit.
+Both actual clients were subsequently observed online at revision 7, confirming
+the Windows update retained pairing and synchronized Hermes settings.
+Docs/commands/checklists are
+in `windows/README.md` and `docs/windows-task-verification.md`.
+
+Backend 200 and Android 103 JVM/APK/lint pass. Native Android reruns first suffered
+host memory pressure, then fresh-emulator permission gaps. Runtime grants are now
+explicitly set on emulator-5554 only; the full instrumentation rerun passes all 16
+tests. The emulator is now stopped to release host memory.
+Shared orb adds optional setActive for hidden Windows windows; Android behavior
+and PCM/turn semantics remain unchanged. Stop the emulator after validation to
+release host memory after future native runs. Desktop computer control was stopped by the owner's Escape;
+respect that boundary and do not resume UI control without a fresh user request.

@@ -198,7 +198,9 @@ addEventListener('resize', () => {
 
 const clock = new THREE.Clock();
 const lerp = (a, b, t) => a + (b - a) * t;
+let animationActive = true, animationFrame = 0;
 function frame() {
+  if (!animationActive) return;
   const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime, k = 1 - Math.exp(-dt * 3);
   for (const key of ['scale', 'bright', 'spin', 'ringSpin', 'bloom', 'jitter', 'sparks']) cur[key] = lerp(cur[key], target[key], k);
   cur.colorObj.lerp(new THREE.Color(target.color), k);
@@ -238,11 +240,17 @@ function frame() {
 
   if (bloom) { bloom.strength = cur.bloom * 0.6 * (0.8 + levelSmoothed * 0.4); composer.render(); }
   else renderer.render(scene, camera);
-  requestAnimationFrame(frame);
+  animationFrame = requestAnimationFrame(frame);
 }
 frame();
 
 window.JarvisOrb = {
+  setActive(active) {
+    if (animationActive === !!active) return;
+    animationActive = !!active;
+    if (animationActive) { clock.getDelta(); frame(); }
+    else cancelAnimationFrame(animationFrame);
+  },
   setState(name) {
     if (!STATES[name]) return;
     stateName = name; target = STATES[name];
