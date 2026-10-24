@@ -1,5 +1,20 @@
 services:
+  control:
+    image: jarvis-runtime:local
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    # The control API has no TCP listener or external network access.
+    network_mode: none
+    command: ["uvicorn", "server.control:create_control_app", "--factory", "--uds", "/run/jarvis/control.sock", "--no-access-log", "--log-level", "warning"]
+    volumes:
+      - gateway_cache:/app/cache
+      - ./:/app/deploy-config
+      - /run/jarvis:/run/jarvis
+    restart: unless-stopped
+
   gateway:
+    image: jarvis-runtime:local
     build:
       context: ..
       dockerfile: deploy/Dockerfile
@@ -7,9 +22,14 @@ services:
     # The image CMD binds uvicorn to 127.0.0.1:8000 only.
     network_mode: host
     env_file: .env
+    environment:
+      JARVIS_CONTROL_SOCKET: /run/jarvis/control.sock
     volumes:
       - hf_cache:/root/.cache/huggingface
       - gateway_cache:/app/cache
+      - /run/jarvis:/run/jarvis
+    depends_on:
+      - control
     restart: unless-stopped
 
   caddy:

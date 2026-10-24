@@ -1,5 +1,5 @@
 jarvis.openclawchip.tech {
-	@gateway path /ws /health
+	@gateway path /ws /health /pairing/request /pairing/claim
 	handle @gateway {
 		reverse_proxy 127.0.0.1:8000
 	}
