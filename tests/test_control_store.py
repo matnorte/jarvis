@@ -97,3 +97,25 @@ def test_runtime_profile_and_voice_preferences_are_canonical_not_environment_def
     assert runtime['env']['ELEVENLABS_VOICE_ID'] == 'new-voice'
     assert runtime['phone']['vision_enabled'] is False
     assert 'token' not in runtime['phone']
+
+
+def test_windows_pairing_is_bound_to_device_and_preserves_android_credential(store):
+    claim = 'w' * 43
+    before = store.env_path.read_text()
+    request = store.request_pairing(claim, device='win')
+    assert store.pending_pairings()[0]['device'] == 'win'
+    with pytest.raises(ControlError, match='Invalid pairing request'):
+        store.request_pairing(claim, device='android')
+    assert store.approve_pairing(request['id'])
+    paired = store.claim_pairing(request['id'], claim)
+    assert paired['token'] == 'win-test' and paired['device'] == 'win'
+    assert store.env_path.read_text() == before
+    legacy = store.request_pairing('a' * 43)
+    store.approve_pairing(legacy['id'])
+    assert store.claim_pairing(legacy['id'], 'a' * 43)['token'] == 'android-test'
+
+
+@pytest.mark.parametrize('device', ['root', '../win', None, True, ['win']])
+def test_pairing_device_type_is_strict_and_never_echoes_input(store, device):
+    with pytest.raises(ControlError, match='^Invalid pairing request$'):
+        store.request_pairing('z' * 43, device=device)

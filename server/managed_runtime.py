@@ -9,6 +9,7 @@ from server.protocol import config
 class _Binding:
     session: object
     send: object
+    device: str = 'android'
     ack_revision: int = 0
     idle: bool = False
     sent_revision: int = 0
@@ -28,8 +29,8 @@ class ManagedRuntime:
     def phone(self):
         return self._target['phone'] if self._target else {}
 
-    async def attach(self, key, session, send):
-        binding = _Binding(session, send)
+    async def attach(self, key, session, send, *, device='android'):
+        binding = _Binding(session, send, device)
         self._bindings[key] = binding
         await self._offer(binding)
 
@@ -79,6 +80,8 @@ class ManagedRuntime:
         await self.report()
 
     async def report(self):
+        phones = [b for b in self._bindings.values() if b.device == 'android']
+        desktops = [b for b in self._bindings.values() if b.device == 'win']
         await self.client.status(revision=self.revision, online=True, error=self.error,
-                                 phone_revision=min((b.resource_revision for b in self._bindings.values()), default=0),
-                                 phone_online=bool(self._bindings))
+                                 phone_revision=min((b.resource_revision for b in phones), default=0), phone_online=bool(phones),
+                                 windows_revision=min((b.resource_revision for b in desktops), default=0), windows_online=bool(desktops))

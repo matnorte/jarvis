@@ -34,8 +34,11 @@ def mount_pairing(app, control):
             raw.extend(part)
         try:
             body = json.loads(raw)
-            expected = {'claim'} if action == 'request' else {'id', 'claim'}
-            if not isinstance(body, dict) or set(body) != expected or not isinstance(body.get('claim'), str):
+            expected = {'claim', 'device'} if action == 'request' else {'id', 'claim'}
+            required = {'claim'} if action == 'request' else expected
+            if not isinstance(body, dict) or set(body) - expected or not required <= set(body) or not isinstance(body.get('claim'), str):
+                raise ValueError
+            if action == 'request' and (not isinstance(body.get('device', 'android'), str) or body.get('device', 'android') not in ('android', 'win')):
                 raise ValueError
             if not re.fullmatch(r'[A-Za-z0-9_-]{32,128}', body['claim']):
                 raise ValueError

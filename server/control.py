@@ -55,6 +55,7 @@ def create_control_app(store: ControlStore | None = None, *, unix_only: bool | N
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     gateway = {'revision': 0, 'online': False, 'error': None}
     phone = {'revision': 0, 'online': False}
+    windows = {'revision': 0, 'online': False}
     heartbeat = 0.0
 
     @app.middleware('http')
@@ -93,9 +94,9 @@ def create_control_app(store: ControlStore | None = None, *, unix_only: bool | N
     @app.post('/pairing/request')
     async def pairing_request(request: Request):
         body = await _body(request)
-        if set(body) != {'claim'}:
+        if 'claim' not in body or set(body) - {'claim', 'device'}:
             raise ControlError('Invalid pairing request')
-        return store.request_pairing(body['claim'])
+        return store.request_pairing(body['claim'], body.get('device', 'android'))
 
     @app.post('/pairing/claim')
     async def pairing_claim(request: Request):
@@ -122,22 +123,26 @@ def create_control_app(store: ControlStore | None = None, *, unix_only: bool | N
         recent = time.monotonic() - heartbeat < 30
         return {'revision': store.snapshot()['revision'],
                 'gateway': {**gateway, 'online': gateway['online'] and recent},
-                'phone': {**phone, 'online': phone['online'] and recent}}
+                'phone': {**phone, 'online': phone['online'] and recent},
+                'windows': {**windows, 'online': windows['online'] and recent}}
 
     @app.put('/internal/status')
     async def update_status(request: Request):
         nonlocal heartbeat
         body = await _body(request)
-        valid = (not set(body) - {'revision', 'online', 'error', 'phone_revision', 'phone_online'}
+        valid = (not set(body) - {'revision', 'online', 'error', 'phone_revision', 'phone_online', 'windows_revision', 'windows_online'}
                  and type(body.get('revision')) is int and body['revision'] >= 0
                  and type(body.get('online')) is bool
                  and body.get('error') in (None, 'apply_failed', 'provider_unavailable')
                  and type(body.get('phone_revision', 0)) is int
-                 and type(body.get('phone_online', False)) is bool)
+                 and type(body.get('phone_online', False)) is bool
+                 and type(body.get('windows_revision', 0)) is int and body.get('windows_revision', 0) >= 0
+                 and type(body.get('windows_online', False)) is bool)
         if not valid:
             raise ControlError('Invalid gateway status')
         gateway.update(revision=body['revision'], online=body['online'], error=body.get('error'))
         phone.update(revision=body.get('phone_revision', 0), online=body.get('phone_online', False))
+        windows.update(revision=body.get('windows_revision', 0), online=body.get('windows_online', False))
         heartbeat = time.monotonic()
         return {'ok': True}
 

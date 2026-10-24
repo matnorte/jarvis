@@ -11,16 +11,20 @@ Both cap JSON bodies at 1 KiB, apply bounded per-peer rate limiting, return fixe
 errors and `Cache-Control: no-store`, and never log bodies. Administration,
 approval, environment and runtime-secret routes are not mounted publicly.
 
-The phone generates a random 32-byte private claim capability in memory. Request
-body: `{claim}`. Response: `{id, expires_in}`. The identifier is public and shown
+Each client generates a random 32-byte private claim capability in memory. Request
+body: `{claim, device?}`. Omitted device means `android` for compatibility; the only
+other accepted value is `win`. The request and its approval are bound to that type;
+reusing a claim with another type fails. Response: `{id, expires_in}`. The identifier is public and shown
 in both phone and owner dashboard; it is insufficient to claim a credential.
 Control stores only the capability's SHA-256 digest, at most sixteen requests,
 for three minutes. The owner must approve the matching identifier in Hermes.
 
 Claim body: `{id, claim}`. Response is `{status: pending}` or `{status: expired}`
-until a matching approved claim succeeds. Success includes the existing Android
-token, canonical server address, preference revision and nonsecret phone settings.
-The phone immediately encrypts the device token with Android Keystore. Claims are
+until a matching approved claim succeeds. Success includes the existing token for
+the approved device type, its `device`, canonical server address, preference revision
+and nonsecret settings. Windows never receives or replaces the Android credential.
+Only a missing credential for that device type is created, leaving other tokens intact.
+Android encrypts the token with Keystore; Windows uses safeStorage/DPAPI. Claims are
 single-use; wrong capabilities do not consume an approval. Capability/token/key
 values never belong in URL parameters, screenshots, logs or chat. The private
 claim is never available to the dashboard browser.
@@ -56,3 +60,6 @@ in a costly loop; saving again creates a fresh revision to retry.
 The private control service communicates only over a root/Hermes-group Unix socket.
 Hermes's authenticated plugin proxies only redacted settings/status and explicit
 approval/decline. It cannot proxy private runtime credentials or phone claims.
+Managed status reports Android and Windows connections/revisions separately; an
+online PC must not make an offline phone appear connected. The shared preferences
+and server resource updates still follow the same per-session safe-idle rules.

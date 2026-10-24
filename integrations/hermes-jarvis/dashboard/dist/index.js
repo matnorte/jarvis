@@ -48,7 +48,7 @@
       setBusy(true); setNotice("");
       try {
         const response = await SDK.fetchJSON(ROOT + "/pairing/" + id + "/" + action, { method: "POST" });
-        setNotice(response.ok ? (action === "approve" ? "Approved. Keep the pairing screen open on your phone." : "Pairing request declined.") : "This request has expired. Start again on your phone.");
+        setNotice(response.ok ? (action === "approve" ? "Approved. Keep the pairing screen open on your device." : "Pairing request declined.") : "This request has expired. Start again on your device.");
         const data = await SDK.fetchJSON(ROOT + "/state"); setState(data);
       } catch (_) { setNotice("Could not update the pairing request. Try again."); }
       finally { setBusy(false); }
@@ -73,26 +73,29 @@
     }
     const heading = h("header", { className: "jarvis-heading" }, h("div", null,
       h("p", { className: "jarvis-eyebrow" }, "YOUR VOICE ASSISTANT"), h("h1", null, "Jarvis"),
-      h("p", { className: "jarvis-muted" }, "One place for your voice, listening, vision and connected phone.")));
+      h("p", { className: "jarvis-muted" }, "One place for your voice, listening, vision and connected devices.")));
     if (!state || !form) return h("div", { className: "jarvis-control" }, heading,
       h("p", { role: "status" }, offline ? "Jarvis control is unavailable. Check the voice gateway service." : "Loading your assistant…"));
     const gateway = state.status.gateway;
     const phone = state.status.phone;
+    const desktop = state.status.windows || { online: false, revision: 0 };
     return h("div", { className: "jarvis-control" }, heading,
       h("div", { className: "jarvis-status-grid" },
         h("div", { className: "jarvis-status" }, h("span", null, "VOICE GATEWAY"), h("strong", null,
           offline || !gateway.online ? "Offline" : gateway.error ? "Could not apply settings" : gateway.revision !== state.revision ? "Applying changes" : "Online")),
         h("div", { className: "jarvis-status" }, h("span", null, "ANDROID PHONE"), h("strong", null,
-          !phone.online ? "Not connected" : phone.revision !== state.revision ? "Settings pending" : "Connected"))),
+          !phone.online ? "Not connected" : phone.revision !== state.revision ? "Settings pending" : "Connected")),
+        h("div", { className: "jarvis-status" }, h("span", null, "WINDOWS PC"), h("strong", null,
+          !desktop.online ? "Not connected" : desktop.revision !== state.revision ? "Settings pending" : "Connected"))),
       offline && h("p", { className: "jarvis-notice", role: "alert" }, "Connection to Jarvis control was lost. Your saved settings are kept."),
-      card("Connect your phone", "Open Pair with Hermes in Jarvis. Approve only the request identifier shown on your phone.",
+      card("Connect a device", "Open Pair with Hermes in Jarvis. Approve only the matching identifier and device type.",
         state.pairings.length ? state.pairings.map(request => h("div", { className: "jarvis-pairing", key: request.id },
           h("div", null, h("strong", { className: "jarvis-request-id" }, request.id.toUpperCase()),
-            h("p", { className: "jarvis-muted" }, request.approved ? "Approved · waiting for phone" : "Expires in " + request.expires_in + " seconds")),
+            h("p", { className: "jarvis-muted" }, (request.device === "win" ? "Windows PC · " : "Android phone · ") + (request.approved ? "Approved · waiting for device" : "Expires in " + request.expires_in + " seconds"))),
           h("div", { className: "jarvis-actions" },
-            h(C.Button, { disabled: busy || request.approved, onClick: () => pairing(request.id, "approve") }, "Approve phone"),
+            h(C.Button, { disabled: busy || request.approved, onClick: () => pairing(request.id, "approve") }, request.device === "win" ? "Approve Windows PC" : "Approve phone"),
             h(C.Button, { disabled: busy, variant: "outline", onClick: () => pairing(request.id, "decline") }, "Decline"))))
-          : h("p", { className: "jarvis-muted" }, "No pending requests. Your device credential stays encrypted on the phone; no token copying is needed.")),
+          : h("p", { className: "jarvis-muted" }, "No pending requests. Credentials stay encrypted on each device; no token copying is needed.")),
       h("form", { onSubmit: save }, h("div", { className: "jarvis-form-grid" },
         card("Voice", "Choose how Jarvis hears and speaks.", [
           field("stt_model", "Speech recognition", "text", [["tiny", "Tiny · lightest"], ["base", "Base · balanced"], ["small", "Small"], ["medium", "Medium"], ["large-v3", "Large v3"], ["turbo", "Turbo"]]),

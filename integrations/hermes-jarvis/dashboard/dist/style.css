@@ -4,6 +4,7 @@
 .jarvis-control .jarvis-eyebrow { font-size: 11px; letter-spacing: .16em; opacity: .65; }
 .jarvis-control .jarvis-muted { color: var(--color-muted-foreground); font-size: 13px; line-height: 1.6; margin-top: 6px; }
 .jarvis-control .jarvis-status-grid, .jarvis-control .jarvis-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin-bottom: 20px; }
+.jarvis-control .jarvis-status-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .jarvis-control .jarvis-status { padding: 20px 24px; border: 1px solid var(--color-border); border-radius: var(--radius, 12px); background: var(--color-card); }
 .jarvis-control .jarvis-status > span { display: block; font-size: 10px; letter-spacing: .12em; opacity: .65; margin-bottom: 8px; }
 .jarvis-control .jarvis-status strong { font-size: 18px; font-weight: 550; }

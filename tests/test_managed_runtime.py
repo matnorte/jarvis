@@ -92,3 +92,22 @@ async def test_failed_apply_keeps_working_pipeline_and_does_not_retry_expensive_
     assert runtime.deps.stt == 'old-stt' and len(calls) == 1
     assert control.statuses[-1]['error'] == 'apply_failed'
     assert 'private' not in str(control.statuses)
+
+
+async def test_managed_status_distinguishes_windows_from_android():
+    control = FakeControl()
+    runtime = ManagedRuntime(control, Settings.from_env(control.data['env']), deps('old'), None)
+    await runtime.tick()
+    async def send(_): pass
+    await runtime.attach('pc', FakeSession(), send, device='win')
+    await runtime.ack('pc', 1, True)
+    await runtime.report()
+    assert control.statuses[-1]['windows_online'] and control.statuses[-1]['windows_revision'] == 1
+    assert not control.statuses[-1]['phone_online']
+    await runtime.attach('phone', FakeSession(), send)
+    await runtime.ack('phone', 1, True)
+    await runtime.report()
+    assert control.statuses[-1]['phone_online']
+    runtime.detach('pc')
+    await runtime.report()
+    assert not control.statuses[-1]['windows_online'] and control.statuses[-1]['phone_online']

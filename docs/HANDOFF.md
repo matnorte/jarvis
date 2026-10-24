@@ -6,7 +6,8 @@ Snapshot: 2026-10-23. Written so another assistant (or a person) can continue wi
 A JARVIS-style voice assistant:
 - **Backend (done, deployed):** `server/` — FastAPI WebSocket voice gateway on a VPS. Mic audio in → faster-whisper (`base`, CPU) → Hermes Agent (fast profile `gpt-5.6-luna`, escalates to deep profile `gpt-6.1-sol` on `[[DEEP]]`, both via OpenAI Codex OAuth) → ElevenLabs TTS (voice **Julian** `7p1Ofvcwsv7UBPoFNcpI`, model `eleven_turbo_v2_5`) → audio back. Live at `wss://jarvis.openclawchip.tech/ws`.
 - **Android app (in progress):** `android/` — native Kotlin client. Branch **`feat/android`**.
-- **Windows client:** not started (sub-project 2).
+- **Windows client:** in progress on `codex/windows`; scope is voice companion,
+  offline wake, shared orb, tray and global talk hotkey. See section 11.
 
 Key docs (read these first):
 - Backend spec: `docs/superpowers/specs/2026-10-23-jarvis-backend-design.md`
@@ -237,3 +238,28 @@ assemblies and lint pass. Candidate Caddyfile validates on the VPS. Running the
 guard initially refused the unauthenticated setup, then passed after native OAuth
 configuration and publication. Public `/jarvis` now redirects to native sign-in;
 the tunnel also uses that gate. The earlier SSH-only claims are superseded.
+
+## 11. Windows voice companion (2026-10-24; active)
+
+The owner confirmed the public Hermes dashboard works completely on their phone,
+then confirmed the Jarvis app works fully. Record these as user-reported functional
+success, not measured battery/noise/call results. Portal BASE URL is saved and first
+phone login is no longer pending. Android preview APK is on GitHub release
+`android-v0.1.0-preview.20261024`; source through `b0ba95f` was pushed to feat/android.
+
+The owner chose **desktop voice companion: orb, wake word, tray and hotkey**.
+No Windows app existed. Work now uses `codex/windows` from the tested Android source.
+Design/sequence: `docs/superpowers/{specs/2026-10-24-jarvis-windows-design.md,
+plans/2026-10-24-jarvis-windows.md}`. Electron 45, native sherpa-onnx 2.0.0 with
+checksummed local KWS/Silero models, isolated renderer, DPAPI credential protection.
+Preserve turn/PCM semantics and keep all preferences/pair approval inside Hermes.
+No webcam or PC control in this first version.
+
+First integration adds optional `device: win` to pairing requests (omitted remains
+Android), binds approval to type, reuses separate existing win credentials, and
+reports Android/Windows connection status separately. Phone and PC must not evict
+each other. These additive metadata changes are in `managed-config-protocol.md`.
+Backend tests pass 200; Windows foundation tests pass 31, including real native
+silence rejection and synthetic Jarvis detection. Android 103 JVM/APK/lint and
+all 16 emulator tests pass before the first Windows-related commit.
+Client files are under `windows/`; native UI/integration/packaging are next.

@@ -88,3 +88,27 @@ def test_public_pairing_limits_attempts_without_echoing_private_inputs(tmp_path)
             assert response.status_code == 400 and 'private-input' not in response.text
         limited = client.post('/pairing/request', json={'claim':'x'*43})
         assert limited.status_code == 429
+
+
+def test_windows_pairing_public_relay_returns_separate_credential_after_approval(tmp_path):
+    client, _, _, store = managed(tmp_path)
+    with client:
+        request = client.post('/pairing/request', json={'claim': 'w' * 43, 'device': 'win'})
+        assert request.status_code == 200
+        key = request.json()['id']
+        assert store.pending_pairings()[0]['device'] == 'win'
+        store.approve_pairing(key)
+        paired = client.post('/pairing/claim', json={'id': key, 'claim': 'w' * 43}).json()
+        assert paired['status'] == 'paired' and paired['device'] == 'win'
+        assert paired['token'] != 'paired-test-token'
+        assert 'android:paired-test-token' in store.env_path.read_text()
+        with client.websocket_connect('/ws') as windows:
+            windows.send_text(json.dumps({'type': 'hello', 'token': paired['token'], 'device': 'win', 'client_config': True}))
+            assert json.loads(windows.receive_text())['type'] == 'config'
+            with client.websocket_connect('/ws') as phone:
+                phone.send_text(json.dumps({'type': 'hello', 'token': 'paired-test-token', 'device': 'android', 'client_config': True}))
+                assert json.loads(phone.receive_text())['type'] == 'config'
+                windows.send_text('{"type":"config_ack","revision":1,"idle":true}')
+                # Phone connection must not evict the separately authenticated Windows client.
+                windows.send_bytes(b'\x01\x00' * 512)
+                assert json.loads(windows.receive_text()) == {'type': 'state', 'state': 'listening'}

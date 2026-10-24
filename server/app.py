@@ -218,7 +218,7 @@ def create_app(
                 )
                 live[device] = conn
             if runtime is not None and client_config:
-                await runtime.attach(ws, conn.session, send_text)
+                await runtime.attach(ws, conn.session, send_text, device=device)
             await _pump(ws, conn.session, send_text, runtime)
         except WebSocketDisconnect:
             pass

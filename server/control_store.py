@@ -73,6 +73,7 @@ class _Pairing:
     id: str
     deadline: float
     proof_hash: bytes = field(repr=False)
+    device: str = 'android'
     approved: bool = False
 
 
@@ -158,25 +159,29 @@ class ControlStore:
         for key in [key for key, item in self._pairings.items() if item.deadline <= self.clock()]:
             del self._pairings[key]
 
-    def request_pairing(self, claim):
+    def request_pairing(self, claim, device='android'):
+        if not isinstance(device, str) or device not in ('android', 'win'):
+            raise ControlError('Invalid pairing request')
         proof = self._proof(claim)
         with self._lock:
             self._prune()
             item = next((p for p in self._pairings.values() if secrets.compare_digest(p.proof_hash, proof)), None)
+            if item is not None and item.device != device:
+                raise ControlError('Invalid pairing request')
             if item is None:
                 if len(self._pairings) >= self.MAX_PAIRINGS:
                     raise ControlError('Too many pairing requests; try again shortly')
                 key = secrets.token_hex(4)
                 while key in self._pairings:
                     key = secrets.token_hex(4)
-                item = _Pairing(key, self.clock() + self.PAIRING_TTL, proof)
+                item = _Pairing(key, self.clock() + self.PAIRING_TTL, proof, device)
                 self._pairings[key] = item
             return {'id': item.id, 'expires_in': max(0, int(item.deadline - self.clock()))}
 
     def pending_pairings(self):
         with self._lock:
             self._prune()
-            return [{'id': p.id, 'expires_in': max(0, int(p.deadline - self.clock())), 'approved': p.approved}
+            return [{'id': p.id, 'device': p.device, 'expires_in': max(0, int(p.deadline - self.clock())), 'approved': p.approved}
                     for p in self._pairings.values()]
 
     def approve_pairing(self, key):
@@ -203,13 +208,13 @@ class ControlStore:
                 return {'status': 'pending'}
             env = self._env()
             tokens = _parse_device_tokens(env.get('DEVICE_TOKENS') or '')
-            token = next((token for token, device in tokens.items() if device == 'android'), None)
+            token = next((token for token, device in tokens.items() if device == item.device), None)
             if token is None:
                 token = secrets.token_urlsafe(32)
-                tokens[token] = 'android'
+                tokens[token] = item.device
                 set_key(self.env_path, 'DEVICE_TOKENS', ','.join(f'{device}:{token}' for token, device in tokens.items()), quote_mode='never')
                 self._revision += 1
                 self._write_preferences(self._preferences, self._revision)
             del self._pairings[key]
-            return {'status': 'paired', 'token': token, 'server_url': self._preferences.public_url,
+            return {'status': 'paired', 'device': item.device, 'token': token, 'server_url': self._preferences.public_url,
                     'revision': self._revision, 'settings': self.runtime()['phone']}

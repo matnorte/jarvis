@@ -26,10 +26,11 @@ class ControlClient:
     async def runtime(self):
         return await self._request('GET', '/internal/runtime')
 
-    async def status(self, *, revision, online, phone_revision=0, phone_online=False, error=None):
+    async def status(self, *, revision, online, phone_revision=0, phone_online=False, windows_revision=0, windows_online=False, error=None):
         return await self._request('PUT', '/internal/status', {
             'revision': revision, 'online': online, 'error': error,
             'phone_revision': phone_revision, 'phone_online': phone_online,
+            'windows_revision': windows_revision, 'windows_online': windows_online,
         })
 
     async def pairing_request(self, body):
