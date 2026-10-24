@@ -1,0 +1,60 @@
+{
+  "name": "jarvis-windows",
+  "version": "0.1.1",
+  "private": true,
+  "description": "Jarvis Windows voice companion",
+  "author": "matnorte",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "src/main.mjs",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "prepare:assets": "node scripts/prepare-assets.mjs",
+    "start": "electron .",
+    "build": "node scripts/build.mjs",
+    "smoke": "electron . --smoke-test",
+    "smoke:long": "electron . --smoke-test --smoke-long-reply"
+  },
+  "dependencies": {
+    "sherpa-onnx-node": "2.0.0",
+    "ws": "8.22.0"
+  },
+  "devDependencies": {
+    "electron": "45.0.0",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "com.openclawchip.jarvis.windows",
+    "productName": "Jarvis",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/sherpa-onnx-*/**/*",
+      "assets/models/**/*"
+    ],
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ],
+      "icon": "assets/jarvis.ico",
+      "signExecutable": false
+    },
+    "portable": {
+      "artifactName": "Jarvis-${version}-${arch}-portable.${ext}"
+    },
+    "nsis": {
+      "artifactName": "Jarvis-${version}-${arch}-setup.${ext}",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  }
+}

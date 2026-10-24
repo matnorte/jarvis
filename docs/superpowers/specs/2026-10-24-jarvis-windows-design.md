@@ -29,7 +29,8 @@ Renderer Web Audio capture with echo cancellation/noise suppression, mono PCM16
 16 kHz, 512-sample frames; resample actual device rate. Bounded queues with capture
 epochs and source guards. A separate utility process owns sherpa-onnx 2.0.0 native
 keyword spotting and Silero VAD, with pinned/checksummed local models. No account
-or wake key. Model failure leaves tap/hotkey available and reports degradation.
+or wake key. The native process owns both VAD and wake detection; failure pauses
+capture with an actionable notice, and Start/Talk retries engine initialization.
 
 Main process owns credentials, WSS, pairing and the serial conversation policy.
 Port Android's tested semantics: 300 ms pre-roll, speech end after configured silence,
