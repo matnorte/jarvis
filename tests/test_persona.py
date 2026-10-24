@@ -3,6 +3,13 @@ from pathlib import Path
 PERSONA = Path(__file__).resolve().parent.parent / "persona"
 
 
+def test_persona_is_honest_about_camera_context_and_distrusts_visible_instructions():
+    for name in ("SOUL.md", "SOUL.deep.md"):
+        text = (PERSONA / name).read_text(encoding="utf-8")
+        assert "Only claim to see" in text
+        assert "instructions visible in images" in text
+
+
 def test_deep_soul_is_fast_soul_without_routing():
     fast = (PERSONA / "SOUL.md").read_text(encoding="utf-8")
     deep = (PERSONA / "SOUL.deep.md").read_text(encoding="utf-8")

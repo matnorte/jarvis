@@ -9,6 +9,20 @@ def test_parse_hello():
     assert parse_client('{"type":"hello","token":"t","device":"win"}') == Hello("t", "win")
 
 
+def test_camera_protocol_is_explicit_bounded_and_does_not_repr_image_data():
+    from server.protocol import Camera, CameraFrame
+    assert parse_client('{"type":"camera","enabled":true}') == Camera(True)
+    assert parse_client('{"type":"camera","enabled":false}') == Camera(False)
+    message = parse_client('{"type":"camera_frame","jpeg":"fake-image-content"}')
+    assert isinstance(message, CameraFrame) and message.jpeg == "fake-image-content"
+    assert "fake-image-content" not in repr(message)
+    for invalid in ('1', '"true"', 'null'):
+        with pytest.raises(ProtocolError):
+            parse_client('{"type":"camera","enabled":%s}' % invalid)
+    with pytest.raises(ProtocolError):
+        parse_client(json.dumps({"type": "camera_frame", "jpeg": "x" * 180000}))
+
+
 def test_hello_client_vad_is_optional_and_strict_boolean():
     assert parse_client('{"type":"hello","token":"t","device":"win"}').client_vad is False
     assert parse_client('{"type":"hello","token":"t","device":"android","client_vad":true}').client_vad is True

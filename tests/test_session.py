@@ -497,6 +497,41 @@ def test_filler_defaults_to_three_seconds():
     assert Harness().session._filler_after == 3.0
 
 
+async def test_live_camera_frame_is_used_for_spoken_question_and_cleared_on_off():
+    from test_vision import jpeg, encoded
+    class VisionRouter(FakeRouter):
+        images = []
+        async def ask(self, device, text, lang, image=None):
+            self.images.append(image)
+            async for event in super().ask(device, text, lang):
+                yield event
+    router = VisionRouter([Delta("A red mug.")])
+    h = Harness(router=router, client_vad=True)
+    pixels = jpeg()
+    h.session.on_camera(True)
+    h.session.on_camera_frame(encoded(pixels))
+    await h.session.on_audio(frame(5000))
+    await h.session.on_end_utterance()
+    await h.session.join()
+    assert router.images == [pixels]
+    h.session.on_camera(False)
+    await h.session.on_text("a normal question")
+    await h.session.join()
+    assert router.images == [pixels, None]
+    await h.session.close()
+
+
+async def test_enabled_camera_without_fresh_frame_gives_explicit_error_not_a_guess():
+    h = Harness()
+    h.session.on_camera(True)
+    await h.session.on_text("what do you see")
+    await h.session.join()
+    assert h.router.calls == []
+    assert h.msgs("error")[0]["code"] == "camera_unavailable"
+    assert h.states()[-1] == "idle"
+    await h.session.close()
+
+
 async def test_turn_timings_are_logged_without_content(caplog):
     caplog.set_level("INFO", logger="server.session")
     h = Harness(router=FakeRouter([Delta("Secret answer text. ")]))

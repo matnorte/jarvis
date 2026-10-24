@@ -163,3 +163,22 @@ Phone checks: setup has no Picovoice field/account link; token survives upgradin
 say “Jarvis” with a Portuguese and English question, adjust wake sensitivity if
 needed, test false triggers during reply playback and wake while screen off. The
 real accent/noise/battery checks remain manual even when the synthetic wake test passes.
+
+## Extension 2: live-vision backend
+
+Files: `server/vision.py`, `protocol.py`, `session.py`, `router.py`, `app.py`, Pillow
+dependency/lock, both personas; frame-validation, routing/history, protocol,
+authenticated WebSocket, Hermes payload, and spoken-turn tests. Wire details and
+rationale are in `docs/vision-protocol.md`.
+
+```bash
+python -m uv run --python 3.12 pytest -W error -q
+export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"
+cd android
+./gradlew testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug
+```
+
+Run the emulator instrumentation commands above as well. Phone checks become
+available after the Android camera UI is installed: start camera, point at text or
+an object, ask about the current view, switch cameras, stop camera and verify later
+questions carry no image; background/reconnect must not reuse an old frame.

@@ -116,3 +116,11 @@ setting removed on open; device token alone completes setup. 83 JVM / 11 emulato
 `android/WAKE_ASSETS.md`. Only arm64-v8a and x86_64 are packaged.
 Official Hermes API supports structured image_url input. Live camera/backend vision
 and full UI redesign are next; phone manual voice/battery checks remain pending.
+
+Live-vision backend is now implemented and locally tested (147 backend tests).
+Optional authenticated JSON `camera`/`camera_frame` controls leave binary PCM and
+Conversation semantics intact; bounded current JPEG only, four-second TTL, no
+images in Jarvis router history. See `docs/vision-protocol.md` for the exact contract.
+Pillow 13 is added to the locked runtime. Backend vision is not deployed yet; Android
+camera transport and full UI are next. Deploy updated personas to both Hermes profiles
+along with the tested backend. User phone is currently disconnected from ADB.

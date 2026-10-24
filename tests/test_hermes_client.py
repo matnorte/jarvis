@@ -34,6 +34,17 @@ async def test_stream_sends_auth_and_model():
     assert seen["auth"] == "Bearer key" and seen["body"]["model"] == "hermes-agent" and seen["body"]["stream"] is True
 
 
+async def test_structured_camera_content_passes_through_unchanged():
+    messages = [{"role": "user", "content": [
+        {"type": "text", "text": "what is this"},
+        {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,test-only", "detail": "auto"}},
+    ]}]
+    def handler(req):
+        assert json.loads(req.content)["messages"] == messages
+        return httpx.Response(200, text="data: [DONE]\n\n")
+    [_ async for _ in make_client(handler).stream(messages)]
+
+
 async def test_non_200_raises():
     with pytest.raises(HermesError):
         [_ async for _ in make_client(lambda r: httpx.Response(500)).stream([])]

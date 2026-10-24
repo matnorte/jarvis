@@ -11,6 +11,7 @@ its stream is stripped before anything is emitted or recorded.
 """
 from __future__ import annotations
 
+import base64
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
@@ -45,9 +46,14 @@ class Router:
         hist = self._history.get(device, [])
         return hist[-keep:] if keep else []
 
-    async def ask(self, device: str, text: str, lang: str) -> AsyncIterator[RouterEvent]:
+    async def ask(self, device: str, text: str, lang: str, image: bytes | None = None) -> AsyncIterator[RouterEvent]:
         user = {"role": "user", "content": f"[lang:{lang}] {text}"}
-        messages = [*self._prior(device), user]
+        current = user if image is None else {"role": "user", "content": [
+            {"type": "text", "text": user["content"]},
+            {"type": "image_url", "image_url": {
+                "url": "data:image/jpeg;base64," + base64.b64encode(image).decode("ascii"), "detail": "auto"}},
+        ]}
+        messages = [*self._prior(device), current]
         answer: list[str] = []
 
         fast_stream = self._fast.stream(messages)

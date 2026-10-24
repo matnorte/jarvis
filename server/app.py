@@ -14,6 +14,7 @@ from starlette.websockets import WebSocketDisconnect
 from server import protocol
 from server.config import Settings
 from server.session import Session
+from server.vision import CameraFrameError
 
 log = logging.getLogger(__name__)
 
@@ -216,5 +217,12 @@ async def _pump(ws: WebSocket, session: Session, send_text) -> None:
             await session.on_interrupt()
         elif isinstance(parsed, protocol.TextInput):
             await session.on_text(parsed.text, parsed.lang)
+        elif isinstance(parsed, protocol.Camera):
+            session.on_camera(parsed.enabled)
+        elif isinstance(parsed, protocol.CameraFrame):
+            try:
+                session.on_camera_frame(parsed.jpeg)
+            except CameraFrameError:
+                await send_text(protocol.error("bad_camera_frame", "Invalid camera frame"))
         else:  # repeated hello: ignore
             log.debug("ignored repeated hello")

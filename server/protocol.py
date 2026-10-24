@@ -1,5 +1,7 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from server.vision import MAX_BASE64_CHARS
 
 
 class ProtocolError(ValueError):
@@ -23,6 +25,16 @@ class Interrupt:
     pass
 
 
+@dataclass(frozen=True)
+class Camera:
+    enabled: bool
+
+
+@dataclass(frozen=True)
+class CameraFrame:
+    jpeg: str = field(repr=False)
+
+
 LANGS = ("pt", "en")
 
 
@@ -32,7 +44,7 @@ class TextInput:
     lang: str = "en"
 
 
-ClientMsg = Hello | EndUtterance | Interrupt | TextInput
+ClientMsg = Hello | EndUtterance | Interrupt | TextInput | Camera | CameraFrame
 
 
 def _str_field(data: dict, key: str) -> str:
@@ -59,6 +71,16 @@ def parse_client(text: str) -> ClientMsg:
         return EndUtterance()
     if kind == "interrupt":
         return Interrupt()
+    if kind == "camera":
+        enabled = data.get("enabled")
+        if not isinstance(enabled, bool):
+            raise ProtocolError("invalid field: enabled (expected boolean)")
+        return Camera(enabled)
+    if kind == "camera_frame":
+        jpeg = _str_field(data, "jpeg")
+        if not jpeg or len(jpeg) > MAX_BASE64_CHARS:
+            raise ProtocolError("invalid camera frame size")
+        return CameraFrame(jpeg)
     if kind == "text":
         lang = data.get("lang", "en")
         if lang not in LANGS:

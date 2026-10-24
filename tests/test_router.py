@@ -39,6 +39,25 @@ async def test_fast_answer_passes_through():
     assert fast.received[-1]["content"] == "[lang:en] hello" and deep.calls == 0
 
 
+async def test_camera_image_reaches_both_profiles_but_never_enters_history():
+    import base64
+    fast, deep = FakeHermes(["[[DEEP]]"]), FakeHermes(["A red mug."])
+    router = Router(fast, deep)
+    image = b"synthetic-camera-pixels"
+    events = [e async for e in router.ask("android", "what is this", "en", image=image)]
+    assert text(events) == "A red mug."
+    expected = [
+        {"type": "text", "text": "[lang:en] what is this"},
+        {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + base64.b64encode(image).decode(), "detail": "auto"}},
+    ]
+    assert fast.received[-1]["content"] == expected
+    assert deep.received[-1]["content"] == expected
+    fast.chunks = ["Another reply."]
+    [_ async for _ in router.ask("android", "and now", "en")]
+    assert fast.received[0] == {"role": "user", "content": "[lang:en] what is this"}
+    assert "data:image" not in str(fast.received)
+
+
 async def test_split_marker_escalates_and_is_never_emitted():
     fast, deep = FakeHermes([" [[DE", "EP]]"]), FakeHermes(["Plano ", "pronto."])
     ev = [e async for e in Router(fast, deep).ask("android", "planeje", "pt")]

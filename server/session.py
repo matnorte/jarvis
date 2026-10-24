@@ -18,6 +18,7 @@ from server import protocol
 from server.router import Delta, Escalated
 from server.stt import Endpointer
 from server.text import ClauseChunker
+from server.vision import CameraFrames
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ _MESSAGES = {
     "stt_failed": "Speech recognition failed.",
     "llm_failed": "The assistant could not answer.",
     "tts_failed": "Speech synthesis failed.",
+    "camera_unavailable": "Camera view is not ready. Keep the camera open and try again.",
 }
 
 
@@ -163,6 +165,7 @@ class Session:
         self._filler_after = filler_after
         self._endpointer = Endpointer(sample_rate=MIC_RATE)
         self._client_vad = client_vad
+        self._camera = CameraFrames()
         self._buf = bytearray()
         self._listening = False
         self._closed = False
@@ -189,6 +192,14 @@ class Session:
 
     def _busy(self) -> bool:
         return self._turn is not None and not self._turn.done()
+
+    def on_camera(self, enabled: bool) -> None:
+        if not self._closed:
+            self._camera.set_enabled(enabled)
+
+    def on_camera_frame(self, jpeg: str) -> None:
+        if not self._closed:
+            self._camera.offer(jpeg)
 
     async def on_audio(self, pcm16: bytes) -> None:
         if self._closed or self._busy():
@@ -218,7 +229,7 @@ class Session:
         if not pcm:
             await self._send_text(protocol.state("idle"))
             return
-        self._start(self._audio_turn, pcm)
+        self._start(self._audio_turn, pcm, self._camera.snapshot(), self._camera.enabled)
 
     async def on_text(self, text: str, lang: str = "en") -> None:
         if self._closed:
@@ -230,7 +241,7 @@ class Session:
         if len(text.strip()) < 2:
             await self._send_text(protocol.state("idle"))
             return
-        self._start(self._text_turn, text, lang)
+        self._start(self._text_turn, text, lang, self._camera.snapshot(), self._camera.enabled)
 
     async def on_interrupt(self) -> None:
         if self._closed:
@@ -244,6 +255,7 @@ class Session:
 
     async def close(self) -> None:
         self._closed = True
+        self._camera.set_enabled(False)
         await _reap(self._turn)
 
     async def join(self) -> None:
@@ -274,7 +286,7 @@ class Session:
         except Exception as exc:  # e.g. the client went away mid-send
             log.warning("turn aborted: %s", type(exc).__name__)
 
-    async def _audio_turn(self, pcm: bytes) -> None:
+    async def _audio_turn(self, pcm: bytes, image: bytes | None = None, camera_requested: bool = False) -> None:
         await self._send_text(protocol.state("thinking"))
         try:
             tr = await self._stt.transcribe(pcm)
@@ -285,20 +297,23 @@ class Session:
             return
         self._mark("stt")
         await self._send_text(protocol.transcript(tr.text, tr.lang, True))
-        await self._respond(tr.text, tr.lang)
+        await self._respond(tr.text, tr.lang, image, camera_requested)
 
-    async def _text_turn(self, text: str, lang: str) -> None:
+    async def _text_turn(self, text: str, lang: str, image: bytes | None = None, camera_requested: bool = False) -> None:
         await self._send_text(protocol.state("thinking"))
         await self._send_text(protocol.transcript(text, lang, True))
-        await self._respond(text, lang)
+        await self._respond(text, lang, image, camera_requested)
 
-    async def _respond(self, text: str, lang: str) -> None:
+    async def _respond(self, text: str, lang: str, image: bytes | None = None, camera_requested: bool = False) -> None:
         text = text.strip()
         if len(text) < 2:
             await self._send_text(protocol.state("idle"))
             return
+        if camera_requested and image is None:
+            await self._fail("camera_unavailable", lang)
+            return
         try:
-            await self._answer(text, lang)
+            await self._answer(text, lang, image)
         except _StageError as exc:
             log.warning("%s: %s", exc.code, type(exc.__cause__).__name__)
             await self._fail(exc.code, lang)
@@ -309,8 +324,8 @@ class Session:
         await self._send_text(protocol.speaking_done())
         await self._send_text(protocol.state("idle"))
 
-    async def _answer(self, text: str, lang: str) -> None:
-        events = self._router.ask(self._device, text, lang)
+    async def _answer(self, text: str, lang: str, image: bytes | None = None) -> None:
+        events = self._router.ask(self._device, text, lang, image=image) if image is not None else self._router.ask(self._device, text, lang)
         speakers = [_Speaker(self, lang)]
         speakers[0].start()  # pre-connect TTS while the LLM thinks
         got_reply = asyncio.Event()

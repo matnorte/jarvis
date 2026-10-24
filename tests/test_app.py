@@ -25,9 +25,11 @@ class FakeSTT:
 class FakeRouter:
     def __init__(self):
         self.calls = []
+        self.images = []
 
-    async def ask(self, device, text, lang):
+    async def ask(self, device, text, lang, image=None):
         self.calls.append((device, text, lang))
+        self.images.append(image)
         yield Delta("Good evening, sir.")
 
 
@@ -72,6 +74,47 @@ def closed_code(ws):
 def test_health():
     client, _ = make()
     assert client.get("/health").json() == {"ok": True}
+
+
+def test_camera_stream_routes_current_image_and_off_clears_it():
+    from test_vision import jpeg, encoded
+    client, deps = make()
+    pixels = jpeg()
+    def until_done(ws):
+        while True:
+            msg = ws.receive()
+            if msg.get("text") and json.loads(msg["text"])["type"] == "speaking_done":
+                return
+    with client.websocket_connect("/ws") as ws:
+        ws.send_text(hello())
+        ws.send_text(json.dumps({"type": "camera", "enabled": True}))
+        ws.send_text(json.dumps({"type": "camera_frame", "jpeg": encoded(pixels)}))
+        ws.send_text(json.dumps({"type": "text", "text": "what do you see"}))
+        until_done(ws)
+        assert deps.router.images == [pixels]
+        ws.send_text(json.dumps({"type": "camera", "enabled": False}))
+        ws.send_text(json.dumps({"type": "text", "text": "hello again"}))
+        until_done(ws)
+        assert deps.router.images == [pixels, None]
+
+
+def test_invalid_camera_image_is_reported_without_echo_and_socket_remains_usable():
+    client, _ = make()
+    with client.websocket_connect("/ws") as ws:
+        ws.send_text(hello())
+        ws.send_text('{"type":"camera","enabled":true}')
+        ws.send_text('{"type":"camera_frame","jpeg":"fake-image-content"}')
+        assert json.loads(ws.receive_text()) == {"type": "error", "code": "bad_camera_frame", "message": "Invalid camera frame"}
+        ws.send_text('{"type":"camera","enabled":false}')
+        ws.send_text('{"type":"text","text":"hi"}')
+        assert json.loads(ws.receive_text()) == {"type": "state", "state": "thinking"}
+
+
+def test_camera_before_auth_is_rejected():
+    client, _ = make()
+    with client.websocket_connect("/ws") as ws:
+        ws.send_text('{"type":"camera","enabled":true}')
+        assert closed_code(ws) == 4401
 
 
 @pytest.mark.parametrize("client_vad", [True, False])
