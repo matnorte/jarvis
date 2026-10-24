@@ -18,7 +18,8 @@ class AudioOut(context: Context) : AutoCloseable {
         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
         .build()
     private val track: AudioTrack
-    private val queue = LinkedBlockingQueue<ByteArray>()
+    private data class Chunk(val pcm: ByteArray, val generation: Int)
+    private val queue = LinkedBlockingQueue<Chunk>()
     private val lock = Any()
 
     // Guarded by lock.
@@ -48,6 +49,8 @@ class AudioOut(context: Context) : AutoCloseable {
             .setTransferMode(AudioTrack.MODE_STREAM)
             .setBufferSizeInBytes(maxOf(minBuf * 2, SAMPLE_RATE / 5 * 2))
             .build()
+        // The default threshold can exceed an entire short reply (e.g. 100 ms).
+        track.setStartThresholdInFrames(SAMPLE_RATE / 100)
         track.play()
         writer = Thread({ writeLoop() }, "jarvis-audio-out").also { it.start() }
     }
@@ -57,33 +60,35 @@ class AudioOut(context: Context) : AutoCloseable {
 
     /** True when nothing is queued or being written and the track has played every written frame. */
     fun isDrained(): Boolean = synchronized(lock) {
-        pending == 0 && track.playbackHeadPosition.toLong() >= framesWritten
+        pending == 0 && head() >= framesWritten
     }
 
     /** Non-blocking: queues PCM16 LE 24 kHz mono for the writer thread. */
     fun write(pcm: ByteArray) {
         if (closed || pcm.isEmpty()) return
         synchronized(lock) {
+            if (closed) return
             pending++
             dirty = true
             requestFocusLocked()
+            lastLevel = rms(pcm)
+            queue.add(Chunk(pcm.copyOf(), generation))
         }
-        lastLevel = rms(pcm)
-        queue.add(pcm)
     }
 
     /** Drops queued audio and whatever the track has buffered. */
     fun flush() {
         if (closed) return
         synchronized(lock) {
-            val cleared = ArrayList<ByteArray>()
+            if (closed) return
+            val cleared = ArrayList<Chunk>()
             queue.drainTo(cleared)
             pending -= cleared.size
             generation++
             track.pause()
             track.flush()
             track.play()
-            framesWritten = track.playbackHeadPosition.toLong()
+            framesWritten = head()
             lastLevel = 0f
         }
     }
@@ -102,16 +107,17 @@ class AudioOut(context: Context) : AutoCloseable {
                 notifyIfDrained()
                 continue
             }
-            val gen = synchronized(lock) { generation }
             var off = 0
-            while (off < chunk.size && !closed) {
-                val n = track.write(chunk, off, chunk.size - off)
-                if (n <= 0) break
-                off += n
-                val stale = synchronized(lock) {
-                    if (gen == generation) { framesWritten += n / 2; false } else true
+            while (off < chunk.pcm.size && !closed) {
+                // Nonblocking 10 ms slices: generation check + native write are atomic with flush.
+                val n = synchronized(lock) {
+                    if (closed || chunk.generation != generation) -1
+                    else track.write(chunk.pcm, off, minOf(480, chunk.pcm.size - off), AudioTrack.WRITE_NON_BLOCKING)
+                        .also { if (it > 0) framesWritten += it / 2 }
                 }
-                if (stale) break
+                if (n < 0) break
+                if (n == 0) { Thread.sleep(5); continue }
+                off += n
             }
             synchronized(lock) { pending-- }
         }
@@ -119,7 +125,7 @@ class AudioOut(context: Context) : AutoCloseable {
 
     private fun notifyIfDrained() {
         val fire = synchronized(lock) {
-            if (dirty && pending == 0 && track.playbackHeadPosition.toLong() >= framesWritten) {
+            if (dirty && pending == 0 && head() >= framesWritten) {
                 dirty = false
                 abandonFocusLocked()
                 true
@@ -144,14 +150,18 @@ class AudioOut(context: Context) : AutoCloseable {
     }
 
     override fun close() {
-        if (closed) return
-        closed = true
-        queue.clear()
-        try { track.pause(); track.flush() } catch (_: IllegalStateException) {}
+        synchronized(lock) {
+            if (closed) return
+            closed = true
+            queue.clear()
+            track.pause(); track.flush()
+        }
         if (Thread.currentThread() !== writer) writer.join(1000)
         track.release()
         synchronized(lock) { abandonFocusLocked() }
     }
+
+    private fun head(): Long = track.playbackHeadPosition.toLong() and 0xFFFFFFFFL
 
     private fun rms(pcm: ByteArray): Float {
         val n = pcm.size / 2

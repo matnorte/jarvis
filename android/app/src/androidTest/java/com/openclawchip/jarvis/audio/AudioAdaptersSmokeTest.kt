@@ -16,6 +16,35 @@ import org.junit.runner.RunWith
 class AudioAdaptersSmokeTest {
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
 
+    @Test fun audioOut_flushCannotRefillTrackWithStaleAudio() {
+        AudioOut(context).use { out ->
+            val drained = CountDownLatch(1)
+            out.setOnDrained { drained.countDown() }
+            out.write(ByteArray(24000 * 2 * 2))
+            Thread.sleep(100)
+            out.flush()
+            assertTrue("flush drain exceeded one buffer period", drained.await(250, TimeUnit.MILLISECONDS))
+            // Observe the native head too: a premature callback can hide a stale blocked write.
+            val field = AudioOut::class.java.getDeclaredField("track").also { it.isAccessible = true }
+            val track = field.get(out) as android.media.AudioTrack
+            val head = track.playbackHeadPosition.toLong() and 0xffffffffL
+            Thread.sleep(250)
+            val later = track.playbackHeadPosition.toLong() and 0xffffffffL
+            assertTrue("stale audio still playing after flush", later - head < 480)
+            assertTrue(out.isDrained())
+        }
+    }
+
+    @Test fun audioOut_shortReplyStartsAndDrains() {
+        AudioOut(context).use { out ->
+            val drained = CountDownLatch(1)
+            out.setOnDrained { drained.countDown() }
+            out.write(ByteArray(2400 * 2)) // 100 ms, smaller than the track buffer.
+            assertTrue("short reply never started", drained.await(1, TimeUnit.SECONDS))
+            assertTrue(out.isDrained())
+        }
+    }
+
     @Test
     fun sileroVad_zeros_isNotSpeech() {
         SileroVad(context).use { vad ->

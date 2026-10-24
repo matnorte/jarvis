@@ -24,6 +24,7 @@ class PorcupineWakeWord(context: Context, accessKey: String, sensitivity: Float)
 
     @Volatile private var closed = false
 
+    @Synchronized
     override fun process(frame: ShortArray): Boolean {
         if (closed) return false
         return try {

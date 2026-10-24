@@ -20,6 +20,7 @@ class SileroVad(context: Context) : Vad {
 
     @Volatile private var closed = false
 
+    @Synchronized
     override fun isSpeech(frame: ShortArray): Boolean = !closed && vad.isSpeech(frame)
 
     @Synchronized
