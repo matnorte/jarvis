@@ -6,17 +6,22 @@ import android.content.Intent
 import android.os.SystemClock
 import androidx.test.platform.app.InstrumentationRegistry
 import com.openclawchip.jarvis.MainActivity
+import com.openclawchip.jarvis.DeviceSettingsFixture
 import com.openclawchip.jarvis.settings.Settings
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.*
 import org.junit.Test
 
 class ServiceSmokeTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
+    private lateinit var settingsFixture: DeviceSettingsFixture
+    @Before fun prepare() { settingsFixture = DeviceSettingsFixture(context) }
     @After fun cleanup() {
         context.stopService(Intent(context, JarvisService::class.java))
-        context.getSharedPreferences("jarvis", 0).edit().clear().commit()
+        waitUntil { !JarvisService.isRunning }
+        settingsFixture.close()
         instrumentation.uiAutomation.dropShellPermissionIdentity()
     }
     private fun launch() {

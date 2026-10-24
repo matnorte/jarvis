@@ -26,14 +26,16 @@
   <button data-s="error">Error</button>
   <button id="mic">Use mic</button>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/shaders/CopyShader.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/EffectComposer.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/RenderPass.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/ShaderPass.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="vendor/three.min.js"></script>
+<script src="vendor/CopyShader.js"></script>
+<script src="vendor/LuminosityHighPassShader.js"></script>
+<script src="vendor/EffectComposer.js"></script>
+<script src="vendor/RenderPass.js"></script>
+<script src="vendor/ShaderPass.js"></script>
+<script src="vendor/UnrealBloomPass.js"></script>
 <script>
+const embedded = new URLSearchParams(location.search).get('embedded') === '1';
+if (embedded) { document.getElementById('ui').style.display = 'none'; document.getElementById('label').style.display = 'none'; }
 // Jarvis hologram orb prototype. Public API: JarvisOrb.setState(name), JarvisOrb.setLevel(0..1)
 const STATES = {
   idle:      { scale: 1.00, bright: 0.55, spin: 0.15, ringSpin: 0.25, bloom: 1.1, color: 0xffa200, jitter: 0.00, sparks: 0.4 },
@@ -53,6 +55,10 @@ document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100);
 camera.position.set(0, 0, 7);
+function fitCamera() {
+  camera.position.z = Math.max(7, 2.4 / (Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * Math.min(1, camera.aspect)));
+}
+fitCamera();
 
 const orb = new THREE.Group();
 scene.add(orb);
@@ -182,7 +188,7 @@ if (THREE.EffectComposer && THREE.UnrealBloomPass) {
 let mx = 0, my = 0;
 addEventListener('pointermove', e => { mx = e.clientX / innerWidth - 0.5; my = e.clientY / innerHeight - 0.5; });
 addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); fitCamera();
   renderer.setSize(innerWidth, innerHeight); if (composer) composer.setSize(innerWidth, innerHeight);
 });
 
@@ -196,7 +202,7 @@ function frame() {
   // Demo level: real mic if enabled, otherwise synthetic speech-like envelope
   const synthetic = (stateName === 'listening' || stateName === 'speaking')
     ? Math.max(0, Math.sin(t * 7) * 0.5 + Math.sin(t * 13.3) * 0.3 + Math.sin(t * 2.1) * 0.4) : 0;
-  level = micLevel !== null ? micLevel : synthetic;
+  level = micLevel !== null ? micLevel : (embedded ? 0 : synthetic);
   levelSmoothed = lerp(levelSmoothed, level, 1 - Math.exp(-dt * 12));
 
   const pulse = 1 + levelSmoothed * cur.jitter * 2.2 + Math.sin(t * 1.3) * 0.012;

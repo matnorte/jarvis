@@ -48,6 +48,27 @@ Native Kotlin client in `android/` (package `com.openclawchip.jarvis`, minSdk 31
 Build and run the JVM tests with Android Studio's JDK and an SDK path in
 `android/local.properties` (`sdk.dir=...`, git-ignored):
 
-    cd android && ./gradlew testDebugUnitTest assembleDebug
+```bash
+export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"
+cd android
+./gradlew testDebugUnitTest assembleDebug
+```
 
 The debug APK lands in `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+Install with `adb -s PHONE_SERIAL install -r app/build/outputs/apk/debug/app-debug.apk`
+from `android/`, then open Jarvis. Tap the gear, keep the default WSS URL, and enter
+the device token and Picovoice AccessKey **only on the phone**. The device token is
+the existing Android entry on the server; get the wake-word AccessKey from
+[Picovoice Console](https://console.picovoice.ai/). Save, allow microphone and
+notification permissions, and optionally allow unrestricted battery use.
+
+Say “Jarvis” or tap the orb to talk. Reply during the six-second follow-up window
+without another wake. Wake or tap during a reply to interrupt. The foreground
+notification has Talk and Stop actions. Optional startup after reboot is a tap-to-start
+notification to respect Android's microphone restrictions.
+
+The shared offline orb lives in `ui/orb/`; Gradle syncs it into generated app assets.
+See [task verification](docs/android-task-verification.md) for Windows commands and
+phone checks, and [device results](docs/android-test-results.md) for the remaining
+manual verification.

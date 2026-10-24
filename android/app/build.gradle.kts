@@ -33,6 +33,12 @@ kotlin {
     }
 }
 
+val copyOrb = tasks.register<Sync>("copyOrb") {
+    from(rootProject.layout.projectDirectory.dir("../ui/orb"))
+    into(layout.projectDirectory.dir("src/main/assets/orb"))
+}
+tasks.named("preBuild") { dependsOn(copyOrb) }
+
 dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.squareup.okhttp3:okhttp:5.5.1")

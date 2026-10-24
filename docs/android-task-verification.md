@@ -81,3 +81,60 @@ flag only into its own connection's session. No Conversation semantics change.
 
 Phone check after backend deployment: ask a sentence with a pause near the configured
 silence threshold; the phone's setting controls turn completion, with no server race.
+
+Deployment: the backend portion of commit `4b13f8c` was applied as a checked patch to
+the clean VPS `main` checkout and the gateway container rebuilt/restarted. `/health`
+returned `{"ok":true}` afterward. The VPS has these six backend/test files modified
+locally until the branch is merged; do not blindly pull/reset over that patch.
+No environment files or credentials were read, copied or modified.
+
+## Task 9 orb UI
+
+Files: shared `ui/orb/orb.html` (moved from `prototype/`), vendored scripts/license
+and SHA-256 sources; Gradle asset sync and ignore rules; `MainActivity.kt`,
+`ui/OrbBridge.kt`; JVM `OrbBridgeTest.kt`; instrumented `ui/OrbWebViewTest.kt` and
+settings-preservation fixture. `Conversation.kt`/`ConversationTest.kt` also cover the
+deferred late-`thinking` drain bug: a finished turn enters follow-up once playback
+drains even if a late state message changed the displayed phase back to THINKING.
+This preserves the existing drain-based follow-up semantics. Captions retain the
+previous transcript until a new final transcript arrives, as before.
+`audio/FrameInbox.kt`/`FrameInboxTest.kt` bound mic backlog to eight recent frames
+(256 ms) with capture generation preserved. The service yields between frames so
+control/socket events remain responsive when capture outruns processing.
+
+```bash
+export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"
+cd android
+./gradlew testDebugUnitTest connectedDebugAndroidTest assembleDebug lintDebug
+```
+
+The desktop browser rendered the vendored orb with no console warnings/errors;
+embedded mode hid the demo label/buttons. Responsive camera distance keeps the
+whole sphere visible on narrow displays. WebView uses bundled assets with network
+loads and general file/content access disabled. The bridge batches updates to
+one evaluation every 34 ms. Instrumented tests preserve pre-existing encrypted
+settings; prefer running the automated suite on the emulator.
+
+Phone checks: golden orb renders offline; captions/status update during a turn;
+orb tap and notification Talk start/interrupt; gear opens Settings; saving settings
+reloads the service; Stop releases capture and Start restarts it. Switch away/back
+and confirm rendering pauses/resumes while the foreground service keeps running.
+
+When both phone and emulator are connected, target instrumentation explicitly instead
+of running it against both devices:
+
+```bash
+export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"
+cd android
+./gradlew testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug
+adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-debug.apk
+adb -s emulator-5554 install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb -s emulator-5554 shell am instrument -w -r com.openclawchip.jarvis.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+If Windows is low on RAM, use `--max-workers=2`,
+`'-Dorg.gradle.jvmargs=-Xmx1024m -Dfile.encoding=UTF-8'` and
+`-Pkotlin.compiler.execution.strategy=in-process`, then `./gradlew --stop` before
+instrumentation. A fresh headless AVD with 2 GB RAM resolved a stalled WebView test;
+the orb then passed its JavaScript/console checks and a screenshot was captured in
+`docs/images/android-orb-emulator.png`.

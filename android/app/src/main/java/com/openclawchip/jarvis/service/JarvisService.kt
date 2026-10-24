@@ -22,6 +22,8 @@ import java.util.concurrent.Executors
 class JarvisService : Service() {
     private val dispatcher = Executors.newSingleThreadExecutor { r -> Thread(r, "jarvis-conversation") }.asCoroutineDispatcher()
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    private val frames = FrameInbox()
+    private var interruptBySpeech = false
     private var conversation: Conversation? = null
     private var client: GatewayClient? = null
     private var input: AudioIn? = null
@@ -49,6 +51,13 @@ class JarvisService : Service() {
         createChannel(this)
         audioManager = getSystemService(AudioManager::class.java)
         audioManager.addOnModeChangedListener(mainExecutor, modeListener)
+        scope.launch {
+            while (isActive) {
+                val frame = frames.receive() ?: break
+                if (!stopping && frame.epoch == micEpoch) processFrame(frame.samples)
+                yield() // Let socket, stop, and focus events run even if capture continuously fills the inbox.
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -83,6 +92,7 @@ class JarvisService : Service() {
         }
         getSystemService(NotificationManager::class.java).cancel(SETUP_NOTIFICATION)
         try {
+            interruptBySpeech = settings.interruptBySpeech
             lateinit var newOutput: AudioOut
             newOutput = AudioOut(this) { focus ->
                 scope.launch {
@@ -128,7 +138,7 @@ class JarvisService : Service() {
             client = gateway
             collector = scope.launch { conv.state.collect { publish() } }
             gateway.connect()
-            startMic(settings.interruptBySpeech)
+            startMic()
         } catch (_: Exception) {
             releasePipeline()
             _uiState.value = idle().copy(notice = "Audio unavailable — reopen Jarvis to retry")
@@ -137,7 +147,7 @@ class JarvisService : Service() {
         }
     }
 
-    private fun startMic(interruptBySpeech: Boolean = Settings.open(this).interruptBySpeech) {
+    private fun startMic() {
         if (stopping || input != null || conversation == null) return
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             micNotice = "Microphone permission required"; publish(); stopSelf(); return
@@ -147,25 +157,26 @@ class JarvisService : Service() {
         val mic = AudioIn(onError = {
             scope.launch { if (!stopping && epoch == micEpoch) pauseMic() }
         }, onFrame = { frame ->
-            scope.launch {
-                if (stopping || epoch != micEpoch) return@launch
-                val conv = conversation ?: return@launch
-                val phase = conv.state.value.phase
-                if (phase == Phase.PAUSED) return@launch
-                try {
-                    val isWake = wake?.process(frame) ?: false
-                    val runVad = phase == Phase.LISTENING || phase == Phase.FOLLOW_UP ||
-                        (phase == Phase.SPEAKING && interruptBySpeech)
-                    conv.onFrame(frame, isWake, runVad && (vad?.isSpeech(frame) ?: false))
-                    publish()
-                } catch (_: Exception) { pauseMic() }
-            }
+            frames.offer(epoch, frame)
         })
         input = mic
         try {
             mic.start()
             micNotice = null
             conversation?.onResume()
+            publish()
+        } catch (_: Exception) { pauseMic() }
+    }
+
+    private fun processFrame(frame: ShortArray) {
+        val conv = conversation ?: return
+        val phase = conv.state.value.phase
+        if (phase == Phase.PAUSED) return
+        try {
+            val isWake = wake?.process(frame) ?: false
+            val runVad = phase == Phase.LISTENING || phase == Phase.FOLLOW_UP ||
+                (phase == Phase.SPEAKING && interruptBySpeech)
+            conv.onFrame(frame, isWake, runVad && (vad?.isSpeech(frame) ?: false))
             publish()
         } catch (_: Exception) { pauseMic() }
     }
@@ -191,7 +202,7 @@ class JarvisService : Service() {
         val state = conversation?.state?.value ?: return
         val active = state.phase in setOf(Phase.LISTENING, Phase.THINKING, Phase.SPEAKING)
         wakeLock?.let { lock ->
-            if (active && !lock.isHeld) lock.acquire()
+            if (active && !lock.isHeld) lock.acquire(10 * 60 * 1000L)
             else if (!active && lock.isHeld) lock.release()
         }
         _uiState.value = state.copy(outLevel = if (state.phase == Phase.SPEAKING) output?.level() ?: 0f else 0f,
@@ -222,6 +233,7 @@ class JarvisService : Service() {
         audioManager.removeOnModeChangedListener(modeListener)
         scope.launch {
             releasePipeline()
+            frames.close()
             if (owner === this@JarvisService) {
                 _uiState.value = idle().copy(notice = _uiState.value.notice?.takeIf {
                     it == "Set up Jarvis" || it == "Microphone permission required" || it.startsWith("Audio unavailable")
@@ -246,6 +258,7 @@ class JarvisService : Service() {
         private fun idle() = UiState(Phase.WAITING, "idle", 0f, 0f, "", "", false, null)
         private val _uiState = MutableStateFlow(idle())
         @Volatile private var owner: JarvisService? = null
+        val isRunning: Boolean get() = owner?.let { !it.stopping } == true
         val uiState: StateFlow<UiState> = _uiState.asStateFlow()
         fun createChannel(context: android.content.Context) {
             context.getSystemService(NotificationManager::class.java).createNotificationChannel(

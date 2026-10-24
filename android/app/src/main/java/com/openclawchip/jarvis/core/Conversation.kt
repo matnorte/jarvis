@@ -129,7 +129,7 @@ class Conversation(private val fx: Effects, private val config: Config, private 
     fun onPlaybackDone() {
         if (!inTurn()) return
         playbackPending = false
-        if (phase == Phase.SPEAKING && serverDone) enterFollowUp()
+        if (serverDone) enterFollowUp()
         publish()
     }
 

@@ -318,6 +318,14 @@ class ConversationTest {
         assertEquals(emptyList<String>(), calls)
     }
 
+    @Test fun thinkingAfterSpeakingDoneStillEntersFollowUpWhenPlaybackDrains() {
+        start(); toSpeaking()
+        conv.onServer(ServerMsg.SpeakingDone)
+        conv.onServer(ServerMsg.State("thinking"))
+        conv.onPlaybackDone()
+        assertEquals(Phase.FOLLOW_UP, phase)
+    }
+
     @Test fun speakingDoneInThinkingAfterAudioWaitsForDrain() {
         start(); toSpeaking()
         conv.onServer(ServerMsg.State("deep")) // ack line sent, display back to THINKING
