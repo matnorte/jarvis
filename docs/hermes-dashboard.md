@@ -1,5 +1,9 @@
 # Hermes's native web dashboard
 
+For the requested phone/public HTTPS migration and its pending personal sign-in,
+see [remote access](hermes-remote-access.md). Until its OAuth preflight passes,
+the SSH tunnel below remains the active access method.
+
 The existing Hermes v0.22.5 installation runs as user `hermes` on the VPS. Its
 official dashboard now runs under `hermes-dashboard.service`, bound only to
 `127.0.0.1:9119`. This is separate from the voice API gateway on 8642 and does not

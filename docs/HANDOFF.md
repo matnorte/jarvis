@@ -201,3 +201,27 @@ lists only the emulator. A USB reconnection question is pending. After installat
 use Settings → Pair with Hermes, approve the actual phone's matching request ID in
 the web tab, verify Connected, and continue original Task 10/manual vision checks.
 Do not resume manual token entry. Do not mark Task 10 complete.
+
+## 10. Remote phone dashboard request (2026-10-24; pending account sign-in)
+
+The owner now explicitly requests Hermes access from anywhere, primarily on the
+phone. This supersedes the earlier SSH-only browser decision, while backend ports
+and the control Unix socket remain private. Prepare public HTTPS at the existing
+`jarvis.openclawchip.tech` origin with native Nous OAuth and Caddy; preserve voice
+routes. The VPS has no Nous login/provider configured. The Portal Local Dashboards
+sign-in page is open for the owner's personal sign-in/Terms acceptance; no account
+or credential was invented. A Tailscale alternative was offered.
+
+`deploy/Caddyfile.hermes` and the tested `check-hermes-public.py` are prepared.
+The active Caddyfile is unchanged: dashboard is not public yet. Run the guard on
+loopback before publication and HTTPS afterward; it refuses disabled/non-OAuth
+gates, exposed owner APIs or missing login redirects. Native public_url engages
+the gate while keeping 9119 loopback. Exact setup/checks are in
+`docs/hermes-remote-access.md`. Do not expose the old loopback SPA bootstrap token
+as remote authentication. Continue once the owner completes Nous setup or chooses
+Tailscale. Physical phone/Task 10 checks remain pending.
+
+Pre-publication checkpoint: 192 backend / 103 JVM / 16 emulator tests pass, APK
+assemblies and lint pass. Candidate Caddyfile validates on the VPS. Running the
+guard against the actual dashboard correctly refuses its disabled OAuth gate.
+Public `/jarvis` remains 404, voice health passes, SSH dashboard stays active.
