@@ -67,8 +67,18 @@ credential (never printed), enabled camera, sent the artificial frame, asked its
 color, received a correct answer and spoken PCM, then disabled camera and closed.
 Native Hermes dashboard remains active on loopback 9119 through an SSH tunnel.
 
-These are automated/emulator/server results. The updated APK has not yet been
-installed on the physical phone; the phone was disconnected at the last check.
+2026-10-24: updated APK installed on the reconnected physical phone; MainActivity
+opened, user confirmed Settings/setup and entered a device token. User then reported
+Connecting. Phone DNS/reachability and public gateway health pass. Inspection of
+boolean connection flags confirms a terminal authentication rejection (4401),
+without reading/displaying the token. The header incorrectly presented that as
+Connecting; a regression fix distinguishes rejection from an active retry. User
+will replace the token directly on the phone. No server token was rotated.
+The status-label fix passes 90 JVM / 15 emulator / 147 backend tests, APK builds
+and lint. Server-side comparisons show the saved Android token, deploy env and
+running gateway agree (match booleans only; credentials never printed).
+
+These are automated/emulator/server and installation results.
 Live real-scene answers, accent/noise, camera switching/orientation on the phone,
 voice latency, calls, screen-off wake, and battery drain remain pending.
 

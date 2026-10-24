@@ -246,3 +246,16 @@ save a nonsecret preference, then start a new conversation to verify it. If the
 native dashboard requires a gateway restart, use its restart control and confirm
 the phone reconnects. Put provider keys only in Hermes's protected configuration
 or server env files; put the device token only in the phone's encrypted settings.
+
+## Phone follow-up: terminal connection status (2026-10-24)
+
+Files: `ui/ConnectionLabel.kt`, `MainActivity.kt`, `ConnectionLabelTest.kt` and
+verification/handoff records. A rejected token (4401) now shows **Token rejected ·
+Open Settings**, and replacement by another connection (4409) shows **Connected
+elsewhere**. Neither claims an ongoing retry. Wire/auth/Conversation behavior is
+unchanged. Run the Extension 3 Windows commands above (90 JVM / 15 emulator tests).
+
+Phone check: a rejected token gives the actionable header. Replace it in Settings
+with only the Android token value, without a device label or quotes. Save & connect
+reloads the client, then confirm Connected and try a spoken question. Never paste
+the token into chat or logs. Do not rotate server tokens merely to debug this UI.

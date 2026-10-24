@@ -61,7 +61,7 @@ class MainActivity : ComponentActivity() {
             val ui = JarvisService.uiState.value
             val running = JarvisService.isRunning
             bridge?.push(ui)
-            connection.update(if (ui.connected) "●  Connected" else if (running) "○  Connecting" else "○  Paused")
+            connection.update(connectionLabel(ui, running))
             connection.setTextColor(if (ui.connected) mint else muted)
             phase.update(if (!running) "Your assistant, on standby" else when (ui.phase) {
                 Phase.WAITING -> "Ready when you are"

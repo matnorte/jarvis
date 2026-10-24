@@ -144,5 +144,21 @@ assemblies and lint pass (existing warnings, no errors). Tests cover real emulat
 preview, tab/background clearing, rotation/JPEG bounds, dropped/stale frames,
 reconnect, secret field protection, pause recreation, and packaged WebGL rendering.
 Design screenshots are under `docs/images/android-{assistant,vision,settings}-emulator.png`.
-User phone was disconnected at the last ADB check; final APK installation and manual
-voice/vision/noise/call/screen-off/battery checks are pending. Do not mark Task 10 done.
+2026-10-24: user reconnected the phone; latest APK installed and MainActivity opened.
+User entered setup and reported “Still connecting.” DNS/reachability and VPS health
+pass; debug inspection of connection flags confirms a terminal 4401 (saved token
+rejected), without reading/displaying its value. The misleading Connecting header
+now shows “Token rejected · Open Settings,” with JVM regression coverage.
+Full verification passes: 90 JVM / 15 emulator / 147 backend, APK builds and lint.
+Server-side comparisons confirm the saved Android token, server env, and running
+gateway agree; only match booleans were printed, and no server token was changed.
+User has a token to enter directly on the phone; use only the Android token value,
+not the `android:` label/quotes. No server token rotation has been performed.
+Physical voice/vision/noise/call/screen-off/battery checks remain pending.
+Do not mark Task 10 done.
+
+Additional user request: **all Jarvis configuration inside Hermes Agent's own UI**,
+including phone pairing and voice/camera preferences. Implement as a native Hermes
+dashboard plugin (upstream supports tabs/API extensions); do not patch Hermes core.
+Android permissions remain OS prompts and phone credentials remain Keystore-encrypted.
+This configuration work is now active; preserve the original pending phone tests.
