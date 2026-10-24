@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.sqrt
 
 /** Reply audio: 24 kHz mono PCM16 streamed through an AudioTrack on a writer thread. */
-class AudioOut(context: Context) : AutoCloseable {
+class AudioOut(context: Context, private val onFocusChange: (Int) -> Unit = {}) : AutoCloseable {
     private val audioManager = context.applicationContext.getSystemService(AudioManager::class.java)
     private val attrs = AudioAttributes.Builder()
         .setUsage(AudioAttributes.USAGE_ASSISTANT)
@@ -138,7 +138,7 @@ class AudioOut(context: Context) : AutoCloseable {
         if (focusRequest != null) return
         val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
             .setAudioAttributes(attrs)
-            .setOnAudioFocusChangeListener { }
+            .setOnAudioFocusChangeListener { onFocusChange(it) }
             .build()
         audioManager.requestAudioFocus(req)
         focusRequest = req

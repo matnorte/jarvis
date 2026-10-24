@@ -39,3 +39,24 @@ Phone checks (once Task 9 connects the main screen): complete setup, save creden
 reopen Settings and verify only “••• saved” appears. Replace a secret without exposing
 the old value. Reject `ws://` URLs. Grant microphone/notification permissions and
 optionally allow unrestricted battery use. Saved credentials must survive app restart.
+
+## Task 8 foreground service
+
+Files: `service/JarvisService.kt`, `service/BootReceiver.kt`, manifest; focus callback
+in `audio/AudioOut.kt`, silenced-capture detection in `audio/AudioIn.kt`, instrumented
+`service/ServiceSmokeTest.kt`.
+
+```bash
+export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"
+cd android
+./gradlew testDebugUnitTest connectedDebugAndroidTest assembleDebug
+```
+
+Phone checks: notification contains Talk and Stop; Stop releases the microphone;
+tap works with an unavailable wake-word engine; missing credentials request setup.
+Take a call/use another recorder and verify PAUSED and recovery in ~5 seconds after
+the mic becomes available. Screen-off wake and swipe-away service survival are Task 10.
+
+Platform adjustment: `startOnBoot` posts “Tap to start Jarvis after reboot” rather
+than starting capture from the boot receiver. Android while-in-use microphone and
+foreground-service restrictions require a user-visible launch. No wire/turn change.

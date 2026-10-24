@@ -103,7 +103,8 @@ class AudioIn internal constructor(
                 if (NoiseSuppressor.isAvailable()) ns = NoiseSuppressor.create(record.audioSessionId)?.also { it.enabled = true }
             } catch (e: Exception) { close(); throw e }
         }
-        override val recording get() = record.recordingState == AudioRecord.RECORDSTATE_RECORDING
+        override val recording get() = record.recordingState == AudioRecord.RECORDSTATE_RECORDING &&
+            record.activeRecordingConfiguration?.isClientSilenced != true
         override fun start() = record.startRecording()
         override fun read(frame: ShortArray, offset: Int, count: Int) = record.read(frame, offset, count)
         override fun stop() = record.stop()
