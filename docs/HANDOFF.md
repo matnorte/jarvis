@@ -105,5 +105,10 @@ VPS inspected: Hermes v0.22.5, installed as user `hermes` under
 `/home/hermes/.hermes/hermes-agent`; `hermes dashboard` command exists. Gateway is
 active on loopback 8642. The dashboard should remain loopback-only (9119) and be
 reached through SSH forwarding. Do not dump `.env`, auth files, or dashboard bootstrap
-tokens. Investigating sherpa-onnx open-vocabulary offline KWS as the account-free
-replacement; official Hermes API supports structured image_url input.
+tokens. Native dashboard is now enabled as `hermes-dashboard.service`, loopback
+9119 only, and verified in-browser through a temporary local SSH tunnel. See
+`docs/hermes-dashboard.md` and the new extension plan
+`docs/superpowers/plans/2026-10-23-jarvis-vision.md`.
+Selected sherpa-onnx open-vocabulary offline KWS as the account-free replacement;
+official Hermes API supports structured image_url input. Runtime/model downloads
+are currently in ignored `android/app/build/wake-download/` for checksum inspection.

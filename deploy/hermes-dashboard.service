@@ -1,0 +1,22 @@
+[Unit]
+Description=Hermes web dashboard (SSH access only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hermes
+Group=hermes
+WorkingDirectory=/home/hermes/.hermes/hermes-agent
+Environment=HOME=/home/hermes
+Environment=PATH=/home/hermes/.local/bin:/home/hermes/.hermes/tools/node-26.12.1-linux-x64/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/hermes/.local/bin/hermes dashboard --host 127.0.0.1 --port 9119 --no-open
+Restart=on-failure
+RestartSec=5
+UMask=0077
+# Native dashboard startup may print a local bootstrap credential. Never journal it.
+StandardOutput=null
+StandardError=null
+
+[Install]
+WantedBy=multi-user.target
