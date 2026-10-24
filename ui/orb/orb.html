@@ -35,7 +35,10 @@
 <script src="vendor/UnrealBloomPass.js"></script>
 <script>
 const embedded = new URLSearchParams(location.search).get('embedded') === '1';
-if (embedded) { document.getElementById('ui').style.display = 'none'; document.getElementById('label').style.display = 'none'; }
+if (embedded) {
+  document.documentElement.style.setProperty('--bg', '#090b0e');
+  document.getElementById('ui').style.display = 'none'; document.getElementById('label').style.display = 'none';
+}
 // Jarvis hologram orb prototype. Public API: JarvisOrb.setState(name), JarvisOrb.setLevel(0..1)
 const STATES = {
   idle:      { scale: 1.00, bright: 0.55, spin: 0.15, ringSpin: 0.25, bloom: 1.1, color: 0xffa200, jitter: 0.00, sparks: 0.4 },
@@ -49,6 +52,7 @@ const cur = Object.assign({}, STATES.idle, { colorObj: new THREE.Color(STATES.id
 let target = STATES.idle, stateName = 'idle', level = 0, levelSmoothed = 0, micLevel = null;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+if (embedded) renderer.setClearColor(0x090b0e, 1);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);

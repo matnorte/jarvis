@@ -120,6 +120,22 @@ class GatewayClientTest {
         assertEquals("{\"type\":\"end_utterance\"}", conn.frame())
     }
 
+    @Test fun cameraFramesUseAuthenticatedSocketAndAreThrottled() {
+        val conn = ServerConn(); accept(conn)
+        val ev = Events()
+        val c = newClient(ev)
+        assertFalse(c.sendCameraFrame(byteArrayOf(1, 2, 3)))
+        c.connect()
+        assertNotNull(ev.connected.poll(5, TimeUnit.SECONDS))
+        assertHello(conn.frame())
+        assertTrue(c.sendCameraFrame(byteArrayOf(1, 2, 3)))
+        assertFalse(c.sendCameraFrame(byteArrayOf(4, 5, 6)))
+        val frame = org.json.JSONObject(conn.frame() as String)
+        assertEquals("camera_frame", frame.getString("type"))
+        assertEquals("AQID", frame.getString("jpeg"))
+        assertNull(conn.frames.poll(100, TimeUnit.MILLISECONDS))
+    }
+
     @Test fun reconnectsAfterDropWithHello() {
         val first = ServerConn(); val second = ServerConn()
         accept(first); accept(second)

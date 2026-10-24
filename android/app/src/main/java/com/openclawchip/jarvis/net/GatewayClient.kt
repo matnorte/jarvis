@@ -3,6 +3,7 @@ package com.openclawchip.jarvis.net
 import com.openclawchip.jarvis.protocol.ClientMsg
 import com.openclawchip.jarvis.protocol.ServerMsg
 import com.openclawchip.jarvis.protocol.parseServer
+import com.openclawchip.jarvis.vision.CameraFramePolicy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -56,6 +57,7 @@ class GatewayClient(
     private var dead = false                   // 4401: never retry
     private var waiting = false                // 4409: wait for reconnectNow()
     private var retryJob: Job? = null
+    private val cameraPolicy = CameraFramePolicy { System.nanoTime() / 1_000_000 }
 
     init {
         val httpForm = when {
@@ -92,6 +94,13 @@ class GatewayClient(
     fun sendAudio(pcm: ByteArray): Boolean {
         val ws = synchronized(lock) { if (connected) socket else null } ?: return false
         return ws.send(pcm.toByteString())
+    }
+
+    /** Optional live vision, authenticated on this socket; no offline or backed-up image queue. */
+    fun sendCameraFrame(jpeg: ByteArray): Boolean = synchronized(lock) {
+        val ws = socket ?: return false
+        if (!cameraPolicy.allow(jpeg.size, connected, ws.queueSize())) return false
+        ws.send(ClientMsg.cameraFrame(jpeg))
     }
 
     /** Permanently stops the client; no further callbacks. */

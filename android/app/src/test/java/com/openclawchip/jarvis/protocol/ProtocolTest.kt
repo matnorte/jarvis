@@ -6,6 +6,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProtocolTest {
+    @Test fun cameraMessagesPreserveAudioBinaryProtocol() {
+        assertEquals(true, JSONObject(ClientMsg.camera(true)).getBoolean("enabled"))
+        assertEquals("camera", JSONObject(ClientMsg.camera(false)).getString("type"))
+        val frame = JSONObject(ClientMsg.cameraFrame(byteArrayOf(1, 2, 3)))
+        assertEquals("camera_frame", frame.getString("type"))
+        assertEquals("AQID", frame.getString("jpeg"))
+    }
     @Test fun helloHasDeviceAndroid() {
         val o = JSONObject(ClientMsg.hello("t"))
         assertEquals("hello" to "android", o.getString("type") to o.getString("device"))

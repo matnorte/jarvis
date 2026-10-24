@@ -1,0 +1,8 @@
+<resources>
+    <item name="assistant_toggle" type="id" />
+    <item name="settings_token" type="id" />
+    <item name="assistant_tab" type="id" />
+    <item name="vision_tab" type="id" />
+    <item name="camera_toggle" type="id" />
+    <item name="camera_preview" type="id" />
+</resources>

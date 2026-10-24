@@ -91,6 +91,10 @@ android.sourceSets.getByName("main").assets.srcDir(wakeAssets.get().asFile)
 tasks.named("preBuild") { dependsOn(prepareWakeAssets) }
 
 dependencies {
+    implementation("androidx.activity:activity:1.13.0")
+    implementation("androidx.camera:camera-camera2:1.6.2")
+    implementation("androidx.camera:camera-lifecycle:1.6.2")
+    implementation("androidx.camera:camera-view:1.6.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.squareup.okhttp3:okhttp:5.5.1")
     implementation(files(sherpaRuntime).builtBy(prepareWakeAssets))

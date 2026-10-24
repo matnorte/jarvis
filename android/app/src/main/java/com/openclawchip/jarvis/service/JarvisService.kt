@@ -11,12 +11,18 @@ import com.openclawchip.jarvis.audio.*
 import com.openclawchip.jarvis.core.*
 import com.openclawchip.jarvis.net.GatewayClient
 import com.openclawchip.jarvis.protocol.ServerMsg
+import com.openclawchip.jarvis.protocol.ClientMsg
 import com.openclawchip.jarvis.settings.Settings
+import com.openclawchip.jarvis.vision.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /** All pipeline ownership and Conversation inputs are serialized on jarvis-conversation. */
 class JarvisService : Service() {
@@ -26,6 +32,9 @@ class JarvisService : Service() {
     private var interruptBySpeech = false
     private var conversation: Conversation? = null
     private var client: GatewayClient? = null
+    private class CameraPacket(val epoch: Long, val jpeg: ByteArray)
+    private val cameraFrames = Channel<CameraPacket>(1, BufferOverflow.DROP_OLDEST)
+    private val vision = LiveVision({ client?.sendText(ClientMsg.camera(it)) }, { client?.sendCameraFrame(it) == true }, SystemClock::elapsedRealtime)
     private var input: AudioIn? = null
     private var output: AudioOut? = null
     private var wake: WakeWord? = null
@@ -51,6 +60,14 @@ class JarvisService : Service() {
         createChannel(this)
         audioManager = getSystemService(AudioManager::class.java)
         audioManager.addOnModeChangedListener(mainExecutor, modeListener)
+        scope.launch { vision.state.collect { if (owner === this@JarvisService) _visionState.value = it } }
+        scope.launch {
+            while (isActive) {
+                val packet = cameraFrames.receiveCatching().getOrNull() ?: break
+                if (!stopping) vision.frame(packet.epoch, packet.jpeg)
+                yield()
+            }
+        }
         scope.launch {
             while (isActive) {
                 val frame = frames.receive() ?: break
@@ -61,6 +78,7 @@ class JarvisService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        getSharedPreferences("onboarding", MODE_PRIVATE).edit().putBoolean("userPaused", intent?.action == ACTION_STOP).apply()
         if (intent?.action == ACTION_STOP) { stopSelf(); return START_NOT_STICKY }
         // Establish the foreground before any engine/network initialization.
         try { startForeground(NOTIFICATION, notification(this, "Starting Jarvis", running = true)) }
@@ -129,11 +147,11 @@ class JarvisService : Service() {
                 if (!stopping && client === gateway && conversation === conv) { block(); publish() }
             } }
             gateway = GatewayClient(settings.serverUrl, settings.deviceToken!!, object : GatewayClient.Listener {
-                override fun onConnected() = event { conv.onConnected() }
-                override fun onDisconnected() = event { conv.onDisconnected() }
+                override fun onConnected() = event { conv.onConnected(); vision.connected() }
+                override fun onDisconnected() = event { conv.onDisconnected(); vision.disconnected() }
                 override fun onMessage(msg: ServerMsg) = event { conv.onServer(msg) }
                 override fun onAudio(pcm: ByteArray) = event { conv.onServerAudio(pcm) }
-                override fun onRejected(code: Int) = event { conv.onRejected(code) }
+                override fun onRejected(code: Int) = event { conv.onRejected(code); vision.disconnected() }
             }, scope)
             client = gateway
             collector = scope.launch { conv.state.collect { publish() } }
@@ -215,6 +233,7 @@ class JarvisService : Service() {
     }
 
     private fun releasePipeline() {
+        vision.reset()
         micEpoch++
         retry?.cancel(); retry = null
         collector?.cancel(); collector = null
@@ -234,11 +253,13 @@ class JarvisService : Service() {
         scope.launch {
             releasePipeline()
             frames.close()
+            cameraFrames.close()
             if (owner === this@JarvisService) {
                 _uiState.value = idle().copy(notice = _uiState.value.notice?.takeIf {
                     it == "Set up Jarvis" || it == "Microphone permission required" || it.startsWith("Audio unavailable")
                 })
                 owner = null
+                _visionState.value = VisionState()
             }
             scope.cancel(); dispatcher.close()
         }
@@ -246,6 +267,12 @@ class JarvisService : Service() {
         super.onDestroy()
     }
     override fun onBind(intent: Intent?): IBinder? = null
+
+    class VisionLink internal constructor(private val service: JarvisService, private val epoch: Long) : AutoCloseable {
+        private val closed = AtomicBoolean(false)
+        fun send(jpeg: ByteArray) { if (!closed.get() && !service.stopping) service.cameraFrames.trySend(CameraPacket(epoch, jpeg)) }
+        override fun close() { if (closed.compareAndSet(false, true)) service.scope.launch { service.vision.stop(epoch) } }
+    }
 
     companion object {
         const val ACTION_START = "com.openclawchip.jarvis.START"
@@ -257,6 +284,15 @@ class JarvisService : Service() {
         private const val SETUP_NOTIFICATION = 2
         private fun idle() = UiState(Phase.WAITING, "idle", 0f, 0f, "", "", false, null)
         private val _uiState = MutableStateFlow(idle())
+        private val _visionState = MutableStateFlow(VisionState())
+        private val cameraEpoch = AtomicLong()
+        val visionState: StateFlow<VisionState> = _visionState.asStateFlow()
+        fun openVision(): VisionLink? {
+            val service = owner?.takeIf { !it.stopping } ?: return null
+            val epoch = cameraEpoch.incrementAndGet()
+            service.scope.launch { if (!service.stopping) service.vision.start(epoch) }
+            return VisionLink(service, epoch)
+        }
         @Volatile private var owner: JarvisService? = null
         val isRunning: Boolean get() = owner?.let { !it.stopping } == true
         val uiState: StateFlow<UiState> = _uiState.asStateFlow()

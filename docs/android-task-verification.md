@@ -182,3 +182,67 @@ Run the emulator instrumentation commands above as well. Phone checks become
 available after the Android camera UI is installed: start camera, point at text or
 an object, ask about the current view, switch cameras, stop camera and verify later
 questions carry no image; background/reconnect must not reuse an old frame.
+
+## Extension 3: live Android camera and complete UI
+
+Files changed: `MainActivity.kt`, `ui/SettingsActivity.kt`, new `ui/UiKit.kt`,
+`service/JarvisService.kt`, `net/GatewayClient.kt`, `protocol/Protocol.kt`,
+new `vision/{CameraStream,CameraFrameEncoder,CameraFramePolicy,LiveVision}.kt`,
+manifest camera permission/optional hardware, stable view IDs, CameraX/Activity
+dependencies, embedded `ui/orb/orb.html` palette, and JVM/instrumented tests.
+The native UI uses Assistant/Vision/Settings tabs; setup requires only the existing
+Jarvis device token. No Picovoice account or wake-engine key is needed.
+
+```bash
+export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"
+cd android
+./gradlew testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug
+./gradlew --stop
+adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-debug.apk
+adb -s emulator-5554 install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb -s emulator-5554 shell am instrument -w -r com.openclawchip.jarvis.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+Expected current results: 88 JVM tests, **OK (15 tests)** from instrumentation,
+and no lint errors. ADB can return exit code zero on an instrumented process crash;
+check the final OK/test count. Backend regression from repo root:
+
+```bash
+python -m uv run --python 3.12 pytest -W error -q
+```
+
+Phone checks:
+
+1. Settings shows the saved token as a protected placeholder, no Picovoice field.
+   Save & connect, check Connected, and ask “Jarvis, que horas são?”.
+2. Pause, reopen/rotate the app: it stays paused. Start or Talk resumes it.
+3. Open Vision: camera is off until Start camera. Allow the permission; point at
+   a book/object, wait for the LIVE indicator, then ask what Jarvis sees.
+4. Flip and verify front/back orientation, readable text, and correct answers for
+   a changed scene. Live frames do not continuously invoke the model; questions do.
+5. Stop camera, leave Vision, lock/background the app, or open Settings: camera
+   access and server image context stop. Reopening requires Start camera again.
+6. Disconnect/reconnect networking with preview open: show waiting status; after
+   reconnect only new frames should become live. Never answer from an expired frame.
+7. Continue all Task 10 wake/follow-up/barge-in/call/screen-off/battery checks.
+
+Design QA captures: `docs/images/android-assistant-emulator.png`,
+`android-vision-emulator.png`, `android-settings-emulator.png`. Emulator screenshots
+use fake local credentials and a virtual camera; Connecting is expected there.
+Settings QA draws the synthetic fixture's native layout; production retains
+`FLAG_SECURE` and never pre-fills a saved token.
+
+## Extension 4: deployed vision and native Hermes configuration
+
+Files: `deploy/hermes-dashboard.service`, `docs/hermes-dashboard.md`, updated
+`persona/SOUL.md` / `SOUL.deep.md`, tested backend/dependency patch above.
+Hermes's own dashboard is running, reachable through the documented SSH tunnel.
+Both profile image probes and an authenticated public-WSS frame → answer → PCM
+probe passed using an artificial solid-color image. No env files were overwritten.
+The VPS checkout retains both deployed patches; reconcile them before an update.
+
+Phone/web checks: open the dashboard through the tunnel, select fast/deep, edit and
+save a nonsecret preference, then start a new conversation to verify it. If the
+native dashboard requires a gateway restart, use its restart control and confirm
+the phone reconnects. Put provider keys only in Hermes's protected configuration
+or server env files; put the device token only in the phone's encrypted settings.

@@ -55,6 +55,23 @@ Offline wake extension: 83 JVM tests and all 11 emulator tests pass, including b
 model silence rejection and detection of “Jarvis” in a locally generated speech fixture.
 No real-person wake/noise or battery result is implied. Backend remains 130 passing.
 
+Live-vision/UI extension checkpoint (2026-10-23 local): 88 JVM tests, 15 emulator
+tests, 147 backend tests pass; both APKs build and lint has no errors. Emulator
+checks include CameraX preview, tab/background camera clearing, upright bounded
+JPEG encoding, pause across recreation, protected token form, and packaged orb.
+Screenshots were visually reviewed under `docs/images/`.
+
+VPS deployed backend/personas: health passes; fast and deep Hermes both identified
+a synthetic red JPEG. A separate public WSS probe authenticated with a server-side
+credential (never printed), enabled camera, sent the artificial frame, asked its
+color, received a correct answer and spoken PCM, then disabled camera and closed.
+Native Hermes dashboard remains active on loopback 9119 through an SSH tunnel.
+
+These are automated/emulator/server results. The updated APK has not yet been
+installed on the physical phone; the phone was disconnected at the last check.
+Live real-scene answers, accent/noise, camera switching/orientation on the phone,
+voice latency, calls, screen-off wake, and battery drain remain pending.
+
 ## Windows commands
 
 See [per-task commands, files, and phone checks](android-task-verification.md).

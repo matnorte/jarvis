@@ -121,6 +121,28 @@ Live-vision backend is now implemented and locally tested (147 backend tests).
 Optional authenticated JSON `camera`/`camera_frame` controls leave binary PCM and
 Conversation semantics intact; bounded current JPEG only, four-second TTL, no
 images in Jarvis router history. See `docs/vision-protocol.md` for the exact contract.
-Pillow 13 is added to the locked runtime. Backend vision is not deployed yet; Android
-camera transport and full UI are next. Deploy updated personas to both Hermes profiles
-along with the tested backend. User phone is currently disconnected from ADB.
+Pillow 13 is added to the locked runtime. Backend vision and both updated personas
+are deployed on the VPS, preserving the earlier client-VAD patch and all env files.
+The server checkout now contains both deployed patches as uncommitted changes;
+reconcile them before pulling/merging. Container rebuilt; public health passes.
+Both native Hermes profiles recognized a synthetic red JPEG, and a public WSS test
+passed authenticated camera frame → Hermes answer → spoken PCM. No real camera
+image or credentials were printed. Dashboard/API/gateway remain loopback-only.
+
+Android live camera and full native UI are implemented: Assistant/Vision/Settings,
+graphite/amber surfaces, shared offline orb, clear connection/phase labels, encrypted
+token replacement, and account-free setup. CameraX preview is explicit, supports
+front/back selection, and stops/clears context on leaving Vision or backgrounding.
+Upright JPEGs have a 640 px long edge, 128 KiB limit, at most 2 FPS; one-slot frame
+inbox drops older frames, socket backpressure drops rather than queues, and source
+epochs reject old preview frames/stop events. Reconnect reannounces camera mode.
+Conversation inputs and PCM protocol remain unchanged. Explicit Pause now survives
+activity recreation/resume; Talk/Start resumes intentionally.
+
+Verification: 88 JVM tests, 15 emulator tests, 147 backend tests; APK/AndroidTest
+assemblies and lint pass (existing warnings, no errors). Tests cover real emulator
+preview, tab/background clearing, rotation/JPEG bounds, dropped/stale frames,
+reconnect, secret field protection, pause recreation, and packaged WebGL rendering.
+Design screenshots are under `docs/images/android-{assistant,vision,settings}-emulator.png`.
+User phone was disconnected at the last ADB check; final APK installation and manual
+voice/vision/noise/call/screen-off/battery checks are pending. Do not mark Task 10 done.

@@ -75,6 +75,12 @@ class OrbWebViewTest {
                     }
                 }
                 assertTrue(applied.await(20, TimeUnit.SECONDS))
+                val drawn = CountDownLatch(1)
+                scenario.onActivity { web!!.postVisualStateCallback(1, object : WebView.VisualStateCallback() {
+                    override fun onComplete(requestId: Long) { drawn.countDown() }
+                }) }
+                assertTrue("Orb did not reach the compositor", drawn.await(20, TimeUnit.SECONDS))
+                Thread.sleep(1000) // Let the animated WebGL surface reach the screenshot compositor.
                 val bitmap = instrumentation.uiAutomation.takeScreenshot()
                 try {
                     File(context.getExternalFilesDir(null), "orb-emulator.png").outputStream().use {

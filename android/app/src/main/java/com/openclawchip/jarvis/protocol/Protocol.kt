@@ -1,9 +1,13 @@
 package com.openclawchip.jarvis.protocol
 
 import org.json.JSONObject
+import java.util.Base64
 
 /** Client -> server messages. Field names match server/protocol.py. */
 object ClientMsg {
+    fun camera(enabled: Boolean): String = JSONObject().put("type", "camera").put("enabled", enabled).toString()
+    fun cameraFrame(jpeg: ByteArray): String = JSONObject().put("type", "camera_frame")
+        .put("jpeg", Base64.getEncoder().encodeToString(jpeg)).toString()
     fun hello(token: String): String =
         JSONObject().put("type", "hello").put("token", token).put("device", "android")
             .put("client_vad", true).toString()

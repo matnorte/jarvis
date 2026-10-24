@@ -41,3 +41,18 @@ Run the full Android JVM + emulator suite and backend suite before each code com
 When phone/emulator both connected, instrument the emulator explicitly using ADB.
 Record Windows commands/files/phone checks in `docs/android-task-verification.md` and
 manual outcomes in `docs/android-test-results.md`. Never claim pending device checks pass.
+
+## Checkpoint
+
+Steps 1–4 are implemented and tested: native Hermes dashboard, offline Sherpa wake,
+bounded server vision, Android CameraX transport, and Assistant/Vision/Settings UI.
+88 JVM / 15 emulator / 147 backend tests pass, including preview shutdown on tab
+change/background and explicit Pause across activity recreation. The fixed model
+speech fixture is synthetic; real phone accent/noise/battery checks remain manual.
+
+Step 5 deployment is complete: tested backend + both profile personas installed;
+both profile image probes and public WSS camera → answer → spoken PCM passed with
+an artificial red square. Env files were preserved. The VPS checkout retains the
+client-VAD and vision patches locally; reconcile before pulling the final branch.
+Physical-phone APK upgrade, real-camera/voice checks, and battery measurement are
+pending USB reconnection/user availability. See the per-task verification document.
