@@ -6,17 +6,21 @@ remain private. The intended browser address is
 `https://jarvis.openclawchip.tech/jarvis?profile=fast`. Existing voice WebSocket,
 health and pairing routes keep their current destinations.
 
-**Pending personal sign-in:** the VPS currently has no Nous login/client
-registration. `deploy/Caddyfile.hermes` is a prepared configuration, not the active
-public proxy. Do not publish the dashboard before the native OAuth gate passes the
-preflight below. The existing SSH dashboard continues working meanwhile.
+**Deployed:** the owner provided their registered public OAuth client ID in a phone
+screenshot. Native Hermes OAuth/public_url are configured and the guarded proxy is
+active. HTTPS and loopback preflights pass; owner APIs require login, and chat,
+terminal and event WebSockets reject unauthenticated access. Voice health passes.
+The browser sign-in page was visually verified. The owner still needs to save the
+Portal BASE URL below and complete the first authenticated phone login; successful
+phone login/mobile-data operation have not yet been observed.
 
 ## Account setup
 
 Use the official [Nous Portal Local Dashboards](https://portal.nousresearch.com/local-dashboards)
-page. The owner completes personal sign-in and any Terms acceptance. Register a
-dashboard named Jarvis with callback
-`https://jarvis.openclawchip.tech/auth/callback`. The resulting public OAuth client
+page. The owner completes personal sign-in and any Terms acceptance. In the Local
+Dashboard editor, set **BASE URL** to `https://jarvis.openclawchip.tech` and save.
+The Portal appends `/auth/callback` itself; do not enter that path in BASE URL.
+The resulting public OAuth client
 identifier belongs in native Hermes `dashboard.oauth.client_id`; it is not a device
 token or provider API key. Do not paste passwords or access/refresh tokens in chat.
 
@@ -72,13 +76,22 @@ and approve only the matching phone pairing request. Use Chrome's Add to Home sc
 for convenient access. Check again on mobile data with Wi-Fi off. Do not claim these
 checks passed until observed. Keep raw 9119/8642/8000 inaccessible from the internet.
 
+The active `deploy/Caddyfile` now matches the validated public candidate. The old
+SSH-only file is backed up on the VPS at `/root/jarvis-Caddyfile.ssh-only-20261024`.
+Rollback requires restoring that file to `deploy/Caddyfile` and recreating Caddy;
+restore/remove native `dashboard.public_url` only if deliberately returning to
+loopback-only operation. No provider key or device token was changed. Native auth
+configuration uses Hermes's CLI and stays on the server; Hermes core is unchanged.
+
 ## Windows regression commands
 
 Checkpoint: 192 backend, 103 JVM and 16 emulator tests pass; debug/test APKs and lint pass. The
-candidate Caddyfile validates on the VPS. The real preflight correctly refuses the
-current unauthenticated loopback dashboard; no public dashboard route was enabled.
+candidate Caddyfile validates on the VPS. The preflight first refused the old
+unauthenticated setup, then passed on loopback and public HTTPS after native OAuth
+was configured. The native login uses the exact HTTPS callback and PKCE S256.
 
-Changed files: `deploy/Caddyfile.hermes`, `deploy/check-hermes-public.py`,
+Changed files: `deploy/Caddyfile`, `deploy/Caddyfile.hermes`,
+`deploy/hermes-dashboard.service`, `deploy/check-hermes-public.py`,
 `tests/test_hermes_public_access.py` and deployment/handoff documentation. No Android
 or voice semantics change. The checker tests reject disabled/invalid gates,
 password-only login, exposed owner APIs and accidental response disclosure.

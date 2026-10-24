@@ -5,7 +5,8 @@ React SDK and authenticated API routes. It does not patch or fork Hermes core.
 The Jarvis tab controls a single shared voice service and Android phone; these
 settings intentionally remain the same when selecting the fast/deep agent profiles.
 Hermes model/provider configuration stays on the native configuration pages linked
-from the tab. The deployment is for the existing owner-operated SSH-only dashboard.
+from the tab. The owner-operated dashboard now supports public HTTPS with native
+Nous OAuth; see `docs/hermes-remote-access.md` for the required auth preflight.
 
 Install/update on the VPS from the Jarvis checkout:
 
@@ -16,8 +17,8 @@ docker compose -f deploy/docker-compose.yml up -d control gateway
 docker compose -f deploy/docker-compose.yml up -d --force-recreate caddy
 ```
 
-Reload Hermes and open `/jarvis`. Keep the dashboard on loopback behind the existing
-SSH tunnel. Its normal session gate also guards the plugin. The plugin's browser
+Reload Hermes and open `/jarvis`. Keep the backend on loopback behind the guarded
+HTTPS proxy (or optional SSH tunnel). Its native OAuth gate guards the plugin. The plugin's browser
 routes expose only redacted settings, status and explicit pairing approval/decline.
 Private runtime credentials and phone claims are never proxied to that browser.
 

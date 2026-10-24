@@ -1,13 +1,17 @@
 # Hermes's native web dashboard
 
-For the requested phone/public HTTPS migration and its pending personal sign-in,
-see [remote access](hermes-remote-access.md). Until its OAuth preflight passes,
-the SSH tunnel below remains the active access method.
+Public phone access is live at
+[Hermes → Jarvis](https://jarvis.openclawchip.tech/jarvis?profile=fast), protected by
+native Nous sign-in. The owner must save `https://jarvis.openclawchip.tech` in the
+Portal dashboard's BASE URL, then sign in with the same account. See
+[remote access](hermes-remote-access.md) for verification and recovery. The tunnel
+below is optional and now also reaches the same OAuth-protected dashboard.
 
 The existing Hermes v0.22.5 installation runs as user `hermes` on the VPS. Its
 official dashboard now runs under `hermes-dashboard.service`, bound only to
 `127.0.0.1:9119`. This is separate from the voice API gateway on 8642 and does not
-replace or restart it. No public admin port or reverse-proxy route was added.
+replace or restart it. Caddy provides public HTTPS on the existing domain, keeping
+the raw backend port private. Native public_url engages the OAuth gate on loopback.
 
 Open an SSH tunnel in Windows PowerShell or Git Bash:
 
@@ -57,7 +61,7 @@ The unit's Node path matches the installed Hermes-managed runtime; update that p
 if a later Hermes upgrade relocates Node. Standard output/error go to null because
 the native dashboard can print local bootstrap credentials during startup.
 
-This is an SSH-authenticated local interface. Do not bind it to a public address or
-proxy it publicly without configuring an appropriate Hermes authentication provider.
+The backend stays bound to loopback. Native Nous OAuth protects both public and
+tunneled requests; preserve it when updating the proxy or service.
 
 Official guide: [Hermes Web Dashboard](https://hermes-agent.nousresearch.com/docs/user-guide/features/web-dashboard).

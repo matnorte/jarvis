@@ -1,5 +1,5 @@
 [Unit]
-Description=Hermes web dashboard (SSH access only)
+Description=Hermes web dashboard (loopback backend, public OAuth via Caddy)
 After=network-online.target
 Wants=network-online.target
 

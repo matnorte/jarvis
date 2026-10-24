@@ -58,7 +58,7 @@ The debug APK lands in `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 Install with `adb -s PHONE_SERIAL install -r app/build/outputs/apk/debug/app-debug.apk`
 from `android/`, then open Jarvis. In Settings, tap **Pair with Hermes**. Open
-Hermes → Jarvis through the [SSH dashboard](docs/hermes-dashboard.md), match the
+Hermes → Jarvis through the [dashboard](docs/hermes-dashboard.md), match the
 public request identifier on your phone, and approve it there. The credential goes
 directly into encrypted phone settings; no token copying is needed. All voice,
 listening, camera and connection preferences are edited in that native Hermes tab.
@@ -76,6 +76,8 @@ See [task verification](docs/android-task-verification.md) for Windows commands 
 phone checks, and [device results](docs/android-test-results.md) for the remaining
 manual verification.
 
-The official Hermes configuration UI is available through an SSH tunnel; see
+The official Hermes configuration UI is available on your phone at
+[Hermes → Jarvis](https://jarvis.openclawchip.tech/jarvis?profile=fast) with native
+Nous sign-in; see
 [Hermes dashboard](docs/hermes-dashboard.md). Offline wake runtime/model download
 versions and hashes are documented in [wake assets](android/WAKE_ASSETS.md).

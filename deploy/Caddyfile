@@ -1,9 +1,16 @@
+# Enable only AFTER check-hermes-public.py passes on the loopback dashboard.
 jarvis.openclawchip.tech {
 	@gateway path /ws /health /pairing/request /pairing/claim
 	handle @gateway {
 		reverse_proxy 127.0.0.1:8000
 	}
-	handle {
+	@private path /internal/* /settings /pairing/*
+	handle @private {
 		respond 404
+	}
+	handle {
+		# Hermes's native OAuth gate protects HTML, API and WebSocket routes.
+		# Keep Host/Origin intact so its exact public_url checks remain effective.
+		reverse_proxy 127.0.0.1:9119
 	}
 }
