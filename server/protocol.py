@@ -10,6 +10,7 @@ class ProtocolError(ValueError):
 class Hello:
     token: str
     device: str
+    client_vad: bool = False
 
 
 @dataclass(frozen=True)
@@ -50,7 +51,10 @@ def parse_client(text: str) -> ClientMsg:
         raise ProtocolError("message must be a JSON object")
     kind = data.get("type")
     if kind == "hello":
-        return Hello(_str_field(data, "token"), _str_field(data, "device"))
+        client_vad = data.get("client_vad", False)
+        if not isinstance(client_vad, bool):
+            raise ProtocolError("invalid field: client_vad (expected boolean)")
+        return Hello(_str_field(data, "token"), _str_field(data, "device"), client_vad)
     if kind == "end_utterance":
         return EndUtterance()
     if kind == "interrupt":

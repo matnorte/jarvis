@@ -151,6 +151,7 @@ class Session:
         tts,
         canned,
         filler_after: float = 3.0,
+        client_vad: bool = False,
     ) -> None:
         self._device = device
         self._send_text = send_text
@@ -161,6 +162,7 @@ class Session:
         self._canned = canned
         self._filler_after = filler_after
         self._endpointer = Endpointer(sample_rate=MIC_RATE)
+        self._client_vad = client_vad
         self._buf = bytearray()
         self._listening = False
         self._closed = False
@@ -200,7 +202,8 @@ class Session:
         if self._mic_ms >= LEVEL_EVERY_MS:
             self._mic_ms = 0.0
             await self._send_text(protocol.level(_rms_level(pcm16), 0.0))
-        result = self._endpointer.feed(pcm16)
+        # A VAD-capable client owns end-of-speech timing. Keep the hard safety cap.
+        result = None if self._client_vad else self._endpointer.feed(pcm16)
         if result == "end" or len(self._buf) >= MAX_UTTERANCE_BYTES:
             await self.on_end_utterance()
         elif result == "no_speech":

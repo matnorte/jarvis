@@ -83,6 +83,7 @@ class GatewayClientTest {
         val s = frame as String
         assertTrue(s, s.contains("\"type\":\"hello\""))
         assertTrue(s, s.contains(token))
+        assertTrue(org.json.JSONObject(s).getBoolean("client_vad"))
     }
 
     @Test fun helloIsFirstFrame() {

@@ -5,7 +5,8 @@ import org.json.JSONObject
 /** Client -> server messages. Field names match server/protocol.py. */
 object ClientMsg {
     fun hello(token: String): String =
-        JSONObject().put("type", "hello").put("token", token).put("device", "android").toString()
+        JSONObject().put("type", "hello").put("token", token).put("device", "android")
+            .put("client_vad", true).toString()
 
     fun endUtterance(): String = JSONObject().put("type", "end_utterance").toString()
 

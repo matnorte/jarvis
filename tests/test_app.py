@@ -74,6 +74,25 @@ def test_health():
     assert client.get("/health").json() == {"ok": True}
 
 
+@pytest.mark.parametrize("client_vad", [True, False])
+def test_authenticated_hello_passes_client_vad_into_session(monkeypatch, client_vad):
+    from server import app as app_module
+    real_session = app_module.Session
+    captured = []
+
+    def session(*args, **kwargs):
+        captured.append(kwargs.get("client_vad", False))
+        return real_session(*args, **kwargs)
+
+    monkeypatch.setattr(app_module, "Session", session)
+    client, _ = make()
+    with client.websocket_connect("/ws") as ws:
+        ws.send_text(json.dumps({"type": "hello", "token": TOKEN, "device": "android", "client_vad": client_vad}))
+        ws.send_bytes(b"\x01\x00" * 512)
+        assert json.loads(ws.receive_text()) == {"type": "state", "state": "listening"}
+        assert captured == [client_vad]
+
+
 def test_startup_ensures_canned_lines():
     client, deps = make()
     with client:
@@ -242,7 +261,8 @@ def test_replacement_race_keeps_single_live_session(monkeypatch):
     peak = [0]
 
     class HeldSession:
-        def __init__(self, device, send_text, send_bytes, *deps):
+        def __init__(self, device, send_text, send_bytes, *deps, client_vad=False):
+            assert client_vad is False
             created.append((len(created), len(live)))
             live.append(self)
             peak[0] = max(peak[0], len(live))

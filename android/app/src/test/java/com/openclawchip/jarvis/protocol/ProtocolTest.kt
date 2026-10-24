@@ -10,6 +10,7 @@ class ProtocolTest {
         val o = JSONObject(ClientMsg.hello("t"))
         assertEquals("hello" to "android", o.getString("type") to o.getString("device"))
         assertEquals("t", o.getString("token"))
+        assertTrue(o.getBoolean("client_vad"))
     }
 
     @Test fun simpleMessagesHaveOnlyType() {

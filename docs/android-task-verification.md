@@ -60,3 +60,24 @@ the mic becomes available. Screen-off wake and swipe-away service survival are T
 Platform adjustment: `startOnBoot` posts “Tap to start Jarvis after reboot” rather
 than starting capture from the boot receiver. Android while-in-use microphone and
 foreground-service restrictions require a user-visible launch. No wire/turn change.
+
+## Task 8b client-owned VAD
+
+Files: `server/protocol.py`, `server/session.py`, `server/app.py`; corresponding
+`tests/test_protocol.py`, `tests/test_session.py`, `tests/test_app.py`; Android
+`protocol/Protocol.kt`, `ProtocolTest.kt`, `GatewayClientTest.kt`.
+
+```bash
+python -m uv run --python 3.12 pytest -W error -q
+export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"
+cd android
+./gradlew testDebugUnitTest connectedDebugAndroidTest assembleDebug
+```
+
+Wire addition authorized by HANDOFF §6: Android sends `"client_vad":true` in hello.
+Omitted/false preserves the old server endpointer; true waits for explicit
+`end_utterance`, retaining the 30-second server cap. Authentication forwards the
+flag only into its own connection's session. No Conversation semantics change.
+
+Phone check after backend deployment: ask a sentence with a pause near the configured
+silence threshold; the phone's setting controls turn completion, with no server race.

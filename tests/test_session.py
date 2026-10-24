@@ -145,6 +145,30 @@ async def speak(h):
     await h.session.join()
 
 
+async def test_client_vad_waits_for_explicit_end_even_after_long_silence():
+    h = Harness(client_vad=True)
+    for _ in range(10):
+        await h.session.on_audio(frame(5000))
+    for _ in range(400):
+        await h.session.on_audio(frame(0))
+    assert h.stt.calls == []
+    assert "thinking" not in h.states() and "idle" not in h.states()
+    await h.session.on_end_utterance()
+    await h.session.join()
+    assert len(h.stt.calls) == 1
+    assert len(h.stt.calls[0]) == 410 * 640
+    await h.session.close()
+
+
+async def test_client_vad_keeps_server_thirty_second_safety_cap():
+    h = Harness(client_vad=True)
+    await h.session.on_audio(frame(5000, ms=31000))
+    await h.session.join()
+    assert len(h.stt.calls) == 1
+    assert len(h.stt.calls[0]) == 30 * 16000 * 2
+    await h.session.close()
+
+
 def other_tasks():
     return [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
 

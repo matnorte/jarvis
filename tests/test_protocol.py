@@ -9,6 +9,15 @@ def test_parse_hello():
     assert parse_client('{"type":"hello","token":"t","device":"win"}') == Hello("t", "win")
 
 
+def test_hello_client_vad_is_optional_and_strict_boolean():
+    assert parse_client('{"type":"hello","token":"t","device":"win"}').client_vad is False
+    assert parse_client('{"type":"hello","token":"t","device":"android","client_vad":true}').client_vad is True
+    assert parse_client('{"type":"hello","token":"t","device":"android","client_vad":false}').client_vad is False
+    for invalid in ('1', '"true"', 'null', '[]'):
+        with pytest.raises(ProtocolError):
+            parse_client('{"type":"hello","token":"t","device":"android","client_vad":%s}' % invalid)
+
+
 def test_parse_other_client_messages():
     assert parse_client('{"type":"text","text":"hi"}') == TextInput("hi")
     assert parse_client('{"type":"end_utterance"}') == EndUtterance()

@@ -105,9 +105,10 @@ def create_app(
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:
         await ws.accept()
-        device = await _authenticate(ws)
-        if device is None:
+        authenticated = await _authenticate(ws)
+        if authenticated is None:
             return
+        device, client_vad = authenticated
 
         conn = _Conn(ws)
         previous = active.get(device)
@@ -145,6 +146,7 @@ def create_app(
                 conn.session = Session(
                     device, send_text, send_bytes,
                     deps.stt, deps.router, deps.tts, deps.canned,
+                    client_vad=client_vad,
                 )
                 live[device] = conn
             await _pump(ws, conn.session, send_text)
@@ -158,8 +160,9 @@ def create_app(
             if live.get(device) is conn:
                 del live[device]
 
-    async def _authenticate(ws: WebSocket) -> str | None:
+    async def _authenticate(ws: WebSocket) -> tuple[str, bool] | None:
         device = None
+        client_vad = False
         try:
             msg = await asyncio.wait_for(ws.receive(), auth_timeout)
             text = msg.get("text")
@@ -171,13 +174,14 @@ def create_app(
                 parsed = protocol.parse_client(text)
                 if isinstance(parsed, protocol.Hello):
                     device = _device_for(settings.device_tokens, parsed.token)
+                    client_vad = parsed.client_vad
         except (protocol.ProtocolError, TimeoutError):
             pass
         except WebSocketDisconnect:
             return None
         if device is None:
             await _safe_close(ws, CLOSE_UNAUTHORIZED)
-        return device
+        return (device, client_vad) if device is not None else None
 
     return app
 
